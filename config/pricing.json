@@ -1,0 +1,24 @@
+{
+    "_comment_source_groq": "https://groq.com/pricing/ (as of Aug 2026)",
+    "_comment_source_gemini": "https://ai.google.dev/pricing (as of Aug 2026, using 1.5 Pro tier pricing as the 'expensive' tier reference)",
+    "llama-3.1-8b-instant": {
+        "input_cost_per_1m": 0.05,
+        "output_cost_per_1m": 0.08
+    },
+    "llama-3.3-70b-versatile": {
+        "input_cost_per_1m": 0.59,
+        "output_cost_per_1m": 0.79
+    },
+    "gemini-3.6-flash": {
+        "input_cost_per_1m": 1.25,
+        "output_cost_per_1m": 5.00
+    },
+    "gemini-capable": {
+        "input_cost_per_1m": 1.25,
+        "output_cost_per_1m": 5.00
+    },
+    "groq-cheap": {
+        "input_cost_per_1m": 0.59,
+        "output_cost_per_1m": 0.79
+    }
+}

@@ -1,0 +1,254 @@
+{
+  "name": "RouteDemo - Cost-Aware Multi-Agent LLM Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "route-demo",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "webhookId": "route-demo-webhook"
+    },
+    {
+      "parameters": {
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.GROQ_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama-3.1-8b-instant"
+            },
+            {
+              "name": "messages",
+              "value": "={{ [ { \"role\": \"user\", \"content\": \"Rate difficulty 1-5, respond with only the digit for this prompt: \" + $json.body.prompt } ] }}"
+            },
+            {
+              "name": "temperature",
+              "value": "0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "classifier-node",
+      "name": "Difficulty Classifier (Groq)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "dataType": "number",
+        "value1": "={{ parseInt($json.choices[0].message.content.match(/\\d/)[0]) || 1 }}",
+        "rules": {
+          "rules": [
+            {
+              "id": "rule-cheap",
+              "operation": "smallerEqual",
+              "value2": 3,
+              "output": 0
+            },
+            {
+              "id": "rule-capable",
+              "operation": "larger",
+              "value2": 3,
+              "output": 1
+            }
+          ]
+        },
+        "fallbackOutput": 1
+      },
+      "id": "switch-node",
+      "name": "Switch (Score <= 3 vs >= 4)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.GROQ_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama-3.3-70b-versatile"
+            },
+            {
+              "name": "messages",
+              "value": "={{ [ { \"role\": \"user\", \"content\": $('Webhook').item.json.body.prompt } ] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cheap-model-node",
+      "name": "Cheap Model (Groq)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, -100]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + $env.CAPABLE_MODEL + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "={{ [ { \"parts\": [ { \"text\": $('Webhook').item.json.body.prompt } ] } ] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "capable-model-node",
+      "name": "Capable Model (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $input.all()[0].json;\nconst webhookData = $('Webhook').item.json.body;\nconst classifierData = $('Difficulty Classifier (Groq)').item.json;\n\nlet rawAnswer = '';\nlet inputTokens = 0;\nlet outputTokens = 0;\nlet modelUsed = '';\n\nif (inputData.choices) {\n  // It came from Groq (Cheap Model)\n  rawAnswer = inputData.choices[0].message.content;\n  inputTokens = inputData.usage.prompt_tokens;\n  outputTokens = inputData.usage.completion_tokens;\n  modelUsed = 'groq-cheap';\n} else if (inputData.candidates) {\n  // It came from Gemini (Capable Model)\n  rawAnswer = inputData.candidates[0].content.parts[0].text;\n  inputTokens = inputData.usageMetadata ? inputData.usageMetadata.promptTokenCount : 0;\n  outputTokens = inputData.usageMetadata ? inputData.usageMetadata.candidatesTokenCount : 0;\n  modelUsed = 'gemini-capable';\n}\n\n// Add classifier token overhead (approximate or extracted if needed)\nconst classifierInputTokens = classifierData.usage ? classifierData.usage.prompt_tokens : 0;\nconst classifierOutputTokens = classifierData.usage ? classifierData.usage.completion_tokens : 0;\n\nconst groundTruth = webhookData.ground_truth;\nlet correct = false;\nif (groundTruth) {\n  correct = rawAnswer.toLowerCase().includes(groundTruth.toString().toLowerCase());\n}\n\nreturn {\n  id: webhookData.id,\n  model: modelUsed,\n  difficulty_score: $('Switch (Score <= 3 vs >= 4)').item.json.value1,\n  input_tokens: inputTokens,\n  output_tokens: outputTokens,\n  classifier_input_tokens: classifierInputTokens,\n  classifier_output_tokens: classifierOutputTokens,\n  raw_answer: rawAnswer,\n  correct: correct\n};"
+      },
+      "id": "merge-compute-node",
+      "name": "Compute Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [800, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-webhook-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1000, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Difficulty Classifier (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Difficulty Classifier (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Switch (Score <= 3 vs >= 4)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch (Score <= 3 vs >= 4)": {
+      "main": [
+        [
+          {
+            "node": "Cheap Model (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capable Model (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cheap Model (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Compute Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capable Model (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Compute Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Metrics": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
