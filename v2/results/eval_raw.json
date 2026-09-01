@@ -1,0 +1,702 @@
+[
+  {
+    "id": "gsm8k_50",
+    "p_correct_cheap": 0.9336970624010121,
+    "draft": {
+      "correct": true,
+      "cost": 0.00013505,
+      "latency_ms": 1405
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00030450000000000003,
+      "latency_ms": 2017
+    }
+  },
+  {
+    "id": "gsm8k_51",
+    "p_correct_cheap": 0.9503871710039755,
+    "draft": {
+      "correct": true,
+      "cost": 0.00017335,
+      "latency_ms": 1615
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.0003375,
+      "latency_ms": 1428
+    }
+  },
+  {
+    "id": "gsm8k_52",
+    "p_correct_cheap": 0.9612453789294432,
+    "draft": {
+      "correct": true,
+      "cost": 0.0001451,
+      "latency_ms": 1285
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00026775,
+      "latency_ms": 1156
+    }
+  },
+  {
+    "id": "gsm8k_53",
+    "p_correct_cheap": 0.9560138891764733,
+    "draft": {
+      "correct": true,
+      "cost": 0.00014015,
+      "latency_ms": 1085
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00017599999999999997,
+      "latency_ms": 1021
+    }
+  },
+  {
+    "id": "gsm8k_54",
+    "p_correct_cheap": 0.9530122227632316,
+    "draft": {
+      "correct": true,
+      "cost": 0.00018935000000000002,
+      "latency_ms": 1368
+    },
+    "mid": {
+      "correct": false,
+      "cost": 0.00019375,
+      "latency_ms": 1098
+    }
+  },
+  {
+    "id": "gsm8k_55",
+    "p_correct_cheap": 0.895082177568992,
+    "draft": {
+      "correct": true,
+      "cost": 0.000101,
+      "latency_ms": 1215
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00023125,
+      "latency_ms": 1465
+    }
+  },
+  {
+    "id": "gsm8k_56",
+    "p_correct_cheap": 0.9550234776412032,
+    "draft": {
+      "correct": true,
+      "cost": 0.00019240000000000001,
+      "latency_ms": 1426
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00034425,
+      "latency_ms": 2496
+    }
+  },
+  {
+    "id": "gsm8k_57",
+    "p_correct_cheap": 0.9701876434360457,
+    "draft": {
+      "correct": true,
+      "cost": 0.00020349999999999999,
+      "latency_ms": 1529
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00030149999999999996,
+      "latency_ms": 1164
+    }
+  },
+  {
+    "id": "gsm8k_58",
+    "p_correct_cheap": 0.9425887236971802,
+    "draft": {
+      "correct": true,
+      "cost": 0.0001488,
+      "latency_ms": 1142
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.0002085,
+      "latency_ms": 1944
+    }
+  },
+  {
+    "id": "gsm8k_59",
+    "p_correct_cheap": 0.9584302488517714,
+    "draft": {
+      "correct": true,
+      "cost": 0.00015885,
+      "latency_ms": 1186
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.000326,
+      "latency_ms": 3699
+    }
+  },
+  {
+    "id": "gsm8k_60",
+    "p_correct_cheap": 0.9912236379321864,
+    "draft": {
+      "correct": true,
+      "cost": 0.00034045,
+      "latency_ms": 2183
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.0005765,
+      "latency_ms": 1822
+    }
+  },
+  {
+    "id": "gsm8k_61",
+    "p_correct_cheap": 0.9489663058223032,
+    "draft": {
+      "correct": true,
+      "cost": 0.0001505,
+      "latency_ms": 1558
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00028399999999999996,
+      "latency_ms": 1087
+    }
+  },
+  {
+    "id": "gsm8k_62",
+    "p_correct_cheap": 0.9392789075436124,
+    "draft": {
+      "correct": true,
+      "cost": 0.00013764999999999998,
+      "latency_ms": 1320
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00021474999999999996,
+      "latency_ms": 4605
+    }
+  },
+  {
+    "id": "gsm8k_63",
+    "p_correct_cheap": 0.9718727025146608,
+    "draft": {
+      "correct": false,
+      "cost": 0.00018135,
+      "latency_ms": 1497
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00029825,
+      "latency_ms": 2826
+    }
+  },
+  {
+    "id": "gsm8k_64",
+    "p_correct_cheap": 0.9333570092316481,
+    "draft": {
+      "correct": true,
+      "cost": 0.00012825,
+      "latency_ms": 1659
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.000167,
+      "latency_ms": 2801
+    }
+  },
+  {
+    "id": "gsm8k_65",
+    "p_correct_cheap": 0.9745841878946451,
+    "draft": {
+      "correct": true,
+      "cost": 0.00019779999999999998,
+      "latency_ms": 2127
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00033600000000000004,
+      "latency_ms": 1414
+    }
+  },
+  {
+    "id": "gsm8k_66",
+    "p_correct_cheap": 0.9407721590804627,
+    "draft": {
+      "correct": true,
+      "cost": 0.00013805,
+      "latency_ms": 1313
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.000336,
+      "latency_ms": 1536
+    }
+  },
+  {
+    "id": "gsm8k_67",
+    "p_correct_cheap": 0.9526402769858515,
+    "draft": {
+      "correct": true,
+      "cost": 0.00016015,
+      "latency_ms": 1293
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00031675,
+      "latency_ms": 1314
+    }
+  },
+  {
+    "id": "gsm8k_68",
+    "p_correct_cheap": 0.952682371415927,
+    "draft": {
+      "correct": true,
+      "cost": 0.0001552,
+      "latency_ms": 1269
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.000316,
+      "latency_ms": 1178
+    }
+  },
+  {
+    "id": "gsm8k_69",
+    "p_correct_cheap": 0.9809656487316541,
+    "draft": {
+      "correct": true,
+      "cost": 0.00023464999999999998,
+      "latency_ms": 1592
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00041924999999999997,
+      "latency_ms": 1428
+    }
+  },
+  {
+    "id": "gsm8k_70",
+    "p_correct_cheap": 0.9393396914657831,
+    "draft": {
+      "correct": true,
+      "cost": 0.00016245,
+      "latency_ms": 1284
+    },
+    "mid": {
+      "correct": false,
+      "cost": 0.00035175,
+      "latency_ms": 10978
+    }
+  },
+  {
+    "id": "gsm8k_71",
+    "p_correct_cheap": 0.9639020028097273,
+    "draft": {
+      "correct": true,
+      "cost": 0.00016825,
+      "latency_ms": 1273
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.0002925,
+      "latency_ms": 989
+    }
+  },
+  {
+    "id": "gsm8k_72",
+    "p_correct_cheap": 0.932094662038008,
+    "draft": {
+      "correct": true,
+      "cost": 0.0001342,
+      "latency_ms": 1294
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00025375,
+      "latency_ms": 1044
+    }
+  },
+  {
+    "id": "gsm8k_73",
+    "p_correct_cheap": 0.9060331619744196,
+    "draft": {
+      "correct": true,
+      "cost": 9.460000000000001e-05,
+      "latency_ms": 1297
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.000144,
+      "latency_ms": 1015
+    }
+  },
+  {
+    "id": "gsm8k_74",
+    "p_correct_cheap": 0.9552922600863091,
+    "draft": {
+      "correct": true,
+      "cost": 0.00018985000000000003,
+      "latency_ms": 1739
+    },
+    "mid": {
+      "correct": true,
+      "cost": 0.00031149999999999993,
+      "latency_ms": 1177
+    }
+  },
+  {
+    "id": "mmlu_50",
+    "p_correct_cheap": 0.06505712073718697,
+    "draft": {
+      "correct": true,
+      "cost": 2.2000000000000003e-05,
+      "latency_ms": 730
+    },
+    "mid": {
+      "correct": true,
+      "cost": 2.1249999999999998e-05,
+      "latency_ms": 684
+    }
+  },
+  {
+    "id": "mmlu_51",
+    "p_correct_cheap": 0.7931004614863009,
+    "draft": {
+      "correct": true,
+      "cost": 2.08e-05,
+      "latency_ms": 784
+    },
+    "mid": {
+      "correct": true,
+      "cost": 1.95e-05,
+      "latency_ms": 537
+    }
+  },
+  {
+    "id": "mmlu_52",
+    "p_correct_cheap": 0.48477789113650227,
+    "draft": {
+      "correct": false,
+      "cost": 4.24e-05,
+      "latency_ms": 783
+    },
+    "mid": {
+      "correct": true,
+      "cost": 4.725e-05,
+      "latency_ms": 627
+    }
+  },
+  {
+    "id": "mmlu_53",
+    "p_correct_cheap": 0.8088699430430721,
+    "draft": {
+      "correct": true,
+      "cost": 1.94e-05,
+      "latency_ms": 641
+    },
+    "mid": {
+      "correct": true,
+      "cost": 1.7749999999999998e-05,
+      "latency_ms": 553
+    }
+  },
+  {
+    "id": "mmlu_54",
+    "p_correct_cheap": 0.7700784977258276,
+    "draft": {
+      "correct": false,
+      "cost": 4.46e-05,
+      "latency_ms": 898
+    },
+    "mid": {
+      "correct": true,
+      "cost": 4.975e-05,
+      "latency_ms": 676
+    }
+  },
+  {
+    "id": "mmlu_55",
+    "p_correct_cheap": 0.8260468018468133,
+    "draft": {
+      "correct": true,
+      "cost": 2.9800000000000003e-05,
+      "latency_ms": 701
+    },
+    "mid": {
+      "correct": true,
+      "cost": 3.2250000000000005e-05,
+      "latency_ms": 470
+    }
+  },
+  {
+    "id": "mmlu_56",
+    "p_correct_cheap": 0.8260549542549388,
+    "draft": {
+      "correct": true,
+      "cost": 1.8599999999999998e-05,
+      "latency_ms": 654
+    },
+    "mid": {
+      "correct": true,
+      "cost": 1.725e-05,
+      "latency_ms": 915
+    }
+  },
+  {
+    "id": "mmlu_57",
+    "p_correct_cheap": 0.8353622821741318,
+    "draft": {
+      "correct": true,
+      "cost": 2.4200000000000002e-05,
+      "latency_ms": 632
+    },
+    "mid": {
+      "correct": true,
+      "cost": 2.425e-05,
+      "latency_ms": 708
+    }
+  },
+  {
+    "id": "mmlu_58",
+    "p_correct_cheap": 0.8188815026795984,
+    "draft": {
+      "correct": true,
+      "cost": 3.4200000000000005e-05,
+      "latency_ms": 627
+    },
+    "mid": {
+      "correct": true,
+      "cost": 3.875e-05,
+      "latency_ms": 646
+    }
+  },
+  {
+    "id": "mmlu_59",
+    "p_correct_cheap": 0.7870077223538239,
+    "draft": {
+      "correct": false,
+      "cost": 2.7000000000000002e-05,
+      "latency_ms": 798
+    },
+    "mid": {
+      "correct": true,
+      "cost": 2.8e-05,
+      "latency_ms": 928
+    }
+  },
+  {
+    "id": "mmlu_60",
+    "p_correct_cheap": 0.8136303087281239,
+    "draft": {
+      "correct": true,
+      "cost": 3.08e-05,
+      "latency_ms": 771
+    },
+    "mid": {
+      "correct": true,
+      "cost": 3.025e-05,
+      "latency_ms": 868
+    }
+  },
+  {
+    "id": "mmlu_61",
+    "p_correct_cheap": 0.7329501020602659,
+    "draft": {
+      "correct": true,
+      "cost": 2.96e-05,
+      "latency_ms": 662
+    },
+    "mid": {
+      "correct": true,
+      "cost": 3.2250000000000005e-05,
+      "latency_ms": 788
+    }
+  },
+  {
+    "id": "mmlu_62",
+    "p_correct_cheap": 0.7178178370915669,
+    "draft": {
+      "correct": false,
+      "cost": 3.24e-05,
+      "latency_ms": 799
+    },
+    "mid": {
+      "correct": true,
+      "cost": 3.55e-05,
+      "latency_ms": 661
+    }
+  },
+  {
+    "id": "mmlu_63",
+    "p_correct_cheap": 0.756428991624797,
+    "draft": {
+      "correct": true,
+      "cost": 1.7199999999999998e-05,
+      "latency_ms": 586
+    },
+    "mid": {
+      "correct": true,
+      "cost": 1.675e-05,
+      "latency_ms": 608
+    }
+  },
+  {
+    "id": "mmlu_64",
+    "p_correct_cheap": 0.7613778230752423,
+    "draft": {
+      "correct": false,
+      "cost": 4.9800000000000004e-05,
+      "latency_ms": 687
+    },
+    "mid": {
+      "correct": true,
+      "cost": 5.8e-05,
+      "latency_ms": 711
+    }
+  },
+  {
+    "id": "mmlu_65",
+    "p_correct_cheap": 0.8202373982181006,
+    "draft": {
+      "correct": true,
+      "cost": 1.7999999999999997e-05,
+      "latency_ms": 569
+    },
+    "mid": {
+      "correct": true,
+      "cost": 1.675e-05,
+      "latency_ms": 743
+    }
+  },
+  {
+    "id": "mmlu_66",
+    "p_correct_cheap": 0.08013215454057097,
+    "draft": {
+      "correct": true,
+      "cost": 2.5200000000000003e-05,
+      "latency_ms": 628
+    },
+    "mid": {
+      "correct": true,
+      "cost": 2.6e-05,
+      "latency_ms": 642
+    }
+  },
+  {
+    "id": "mmlu_67",
+    "p_correct_cheap": 0.5650699685646607,
+    "draft": {
+      "correct": true,
+      "cost": 3.4399999999999996e-05,
+      "latency_ms": 678
+    },
+    "mid": {
+      "correct": true,
+      "cost": 4.25e-05,
+      "latency_ms": 645
+    }
+  },
+  {
+    "id": "mmlu_68",
+    "p_correct_cheap": 0.7605372453452921,
+    "draft": {
+      "correct": true,
+      "cost": 2.12e-05,
+      "latency_ms": 646
+    },
+    "mid": {
+      "correct": true,
+      "cost": 2.2e-05,
+      "latency_ms": 727
+    }
+  },
+  {
+    "id": "mmlu_69",
+    "p_correct_cheap": 0.7447964902933264,
+    "draft": {
+      "correct": true,
+      "cost": 2.2000000000000003e-05,
+      "latency_ms": 618
+    },
+    "mid": {
+      "correct": true,
+      "cost": 2.2499999999999998e-05,
+      "latency_ms": 656
+    }
+  },
+  {
+    "id": "mmlu_70",
+    "p_correct_cheap": 0.7395479580603521,
+    "draft": {
+      "correct": false,
+      "cost": 2.66e-05,
+      "latency_ms": 686
+    },
+    "mid": {
+      "correct": true,
+      "cost": 2.875e-05,
+      "latency_ms": 539
+    }
+  },
+  {
+    "id": "mmlu_71",
+    "p_correct_cheap": 0.4648031446249822,
+    "draft": {
+      "correct": true,
+      "cost": 1.76e-05,
+      "latency_ms": 651
+    },
+    "mid": {
+      "correct": true,
+      "cost": 1.625e-05,
+      "latency_ms": 726
+    }
+  },
+  {
+    "id": "mmlu_72",
+    "p_correct_cheap": 0.8241611337730129,
+    "draft": {
+      "correct": true,
+      "cost": 2.92e-05,
+      "latency_ms": 868
+    },
+    "mid": {
+      "correct": true,
+      "cost": 3.15e-05,
+      "latency_ms": 594
+    }
+  },
+  {
+    "id": "mmlu_73",
+    "p_correct_cheap": 0.7186569059967938,
+    "draft": {
+      "correct": false,
+      "cost": 7.18e-05,
+      "latency_ms": 613
+    },
+    "mid": {
+      "correct": false,
+      "cost": 8.3e-05,
+      "latency_ms": 437
+    }
+  },
+  {
+    "id": "mmlu_74",
+    "p_correct_cheap": 0.8050395143985432,
+    "draft": {
+      "correct": true,
+      "cost": 3.18e-05,
+      "latency_ms": 671
+    },
+    "mid": {
+      "correct": true,
+      "cost": 3.4500000000000005e-05,
+      "latency_ms": 742
+    }
+  }
+]

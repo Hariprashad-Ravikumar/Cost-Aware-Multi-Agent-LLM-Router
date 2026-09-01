@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Calibrated Cost-Aware LLM Router</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #131722;
+    --panel-border: #232838;
+    --text: #e6e9f0;
+    --muted: #8b93a7;
+    --accent: #5b8cff;
+    --openai: #10a37f;
+    --anthropic: #d97757;
+    --gemini: #4285f4;
+    --good: #34d399;
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 96px; }
+  header { margin-bottom: 40px; }
+  h1 { font-size: 1.8rem; margin: 0 0 8px; font-weight: 650; letter-spacing: -0.01em; }
+  .pitch { color: var(--muted); font-size: 1.02rem; margin: 0 0 20px; max-width: 640px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid var(--panel-border);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  section { margin: 40px 0; }
+  h2 { font-size: 1.15rem; font-weight: 650; margin: 0 0 16px; display: flex; align-items: center; gap: 8px; }
+  h2::before { content: ""; width: 3px; height: 16px; background: var(--accent); border-radius: 2px; }
+  .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px; }
+  .mermaid { background: var(--panel); border-radius: 12px; }
+  textarea {
+    width: 100%; min-height: 90px; background: #0e1119; color: var(--text);
+    border: 1px solid var(--panel-border); border-radius: 8px; padding: 12px;
+    font-family: inherit; font-size: 0.95rem; resize: vertical;
+  }
+  .row { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+  button {
+    background: var(--accent); color: white; border: none; border-radius: 8px;
+    padding: 10px 18px; font-weight: 600; cursor: pointer; font-size: 0.9rem;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .examples button { background: var(--panel); color: var(--muted); border: 1px solid var(--panel-border); font-weight: 500; font-size: 0.8rem; padding: 6px 12px; }
+  #result { margin-top: 18px; display: none; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .stat { background: #0e1119; border: 1px solid var(--panel-border); border-radius: 8px; padding: 10px 12px; }
+  .stat-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-value { font-size: 1.1rem; font-weight: 650; margin-top: 2px; }
+  .answer-box { background: #0e1119; border: 1px solid var(--panel-border); border-radius: 8px; padding: 14px; white-space: pre-wrap; font-size: 0.9rem; max-height: 260px; overflow-y: auto; }
+  .eq { padding: 14px 4px; overflow-x: auto; }
+  pre { background: #0e1119; border: 1px solid var(--panel-border); border-radius: 8px; padding: 14px; overflow-x: auto; font-size: 0.82rem; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .error { color: #f87171; font-size: 0.88rem; margin-top: 10px; }
+  footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--panel-border); padding-top: 20px; margin-top: 60px; }
+  footer a { color: var(--accent); }
+  .todo-note { color: var(--warn); font-size: 0.8rem; font-style: italic; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Calibrated Cost-Aware LLM Router</h1>
+    <p class="pitch">Routes each prompt to the cheapest model tier a small, calibrated statistics model predicts will still get it right — not an LLM guessing "how hard is this," a logistic regression trained on real labeled outcomes.</p>
+    <div class="badges">
+      <span class="badge"><span class="dot" style="background:var(--openai)"></span>OpenAI gpt-5.4-nano &middot; cheap tier</span>
+      <span class="badge"><span class="dot" style="background:var(--gemini)"></span>Gemini 3.1 Flash-Lite &middot; mid tier</span>
+      <span class="badge"><span class="dot" style="background:var(--anthropic)"></span>Claude Sonnet 5 &middot; capable tier</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Architecture</h2>
+    <div class="mermaid" id="diagram">
+graph LR
+  A[Prompt] --> B["Draft call<br/>(OpenAI cheap tier)"]
+  B --> C[Feature extraction]
+  C --> D[Calibrator<br/>logistic regression]
+  D --> E{"Decision:<br/>error budget check"}
+  E -->|"P(correct) high enough"| F[cheap]
+  E -->|escalate| G[mid]
+  E -->|escalate further| H[capable]
+    </div>
+  </section>
+
+  <section>
+    <h2>Try it live</h2>
+    <div class="panel">
+      <textarea id="prompt-input" placeholder="Type a prompt — try something trivial, then something like a formal proof...">What is 15% of 240?</textarea>
+      <div class="row examples">
+        <button onclick="fillExample('easy')">Easy example</button>
+        <button onclick="fillExample('hard')">Hard example</button>
+      </div>
+      <div class="row">
+        <button id="submit-btn" onclick="runRoute()">Route this prompt</button>
+        <span id="status" style="color:var(--muted); font-size:0.85rem;"></span>
+      </div>
+      <div id="result">
+        <div class="stat-grid">
+          <div class="stat"><div class="stat-label">Chosen tier</div><div class="stat-value" id="r-tier">-</div></div>
+          <div class="stat"><div class="stat-label">P(correct)</div><div class="stat-value" id="r-pcorrect">-</div></div>
+          <div class="stat"><div class="stat-label">Cost</div><div class="stat-value" id="r-cost">-</div></div>
+          <div class="stat"><div class="stat-label">Latency</div><div class="stat-value" id="r-latency">-</div></div>
+        </div>
+        <div class="answer-box" id="r-answer"></div>
+      </div>
+      <div class="error" id="error-box"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The math</h2>
+    <div class="panel">
+      <p style="color:var(--muted); margin-top:0;">The calibrator (<code>app/router/calibrator.py</code>) is a logistic regression over four features — not an LLM call:</p>
+      <div class="eq" id="eq-logreg"></div>
+      <p style="color:var(--muted);">The router accepts the cheap tier's answer only if its predicted error rate stays under a configured budget &epsilon; (<code>app/router/decision.py</code>):</p>
+      <div class="eq" id="eq-decision"></div>
+      <p style="color:var(--muted);">Calibration quality is checked with Expected Calibration Error (<code>scripts/stats_utils.py</code>) — does the model's confidence match its actual accuracy?</p>
+      <div class="eq" id="eq-ece"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Code, not vibes</h2>
+    <pre><code>def decide_tier(p_correct_cheap, error_budget, p_correct_mid=None):
+    predicted_error_cheap = 1.0 - p_correct_cheap
+    if predicted_error_cheap &lt;= error_budget + 1e-9:
+        return RoutingDecision(chosen_tier="cheap", ...)
+    # escalate one rung, re-check against the same budget
+    ...</code></pre>
+  </section>
+
+  <section>
+    <h2>Real results</h2>
+    <div class="panel">
+      <p style="color:var(--muted); margin-top:0;">Held-out evaluation, 50 prompts never seen during calibrator training. Baseline (<code>always_capable</code>, every prompt sent to Claude Sonnet 5 directly): 92.0% accuracy, $0.09387 total cost.</p>
+      <div class="stat-grid">
+        <div class="stat"><div class="stat-label">Production default (&epsilon;=0.15)</div><div class="stat-value">96.0% accuracy</div></div>
+        <div class="stat"><div class="stat-label">Cost</div><div class="stat-value">$0.00569</div></div>
+        <div class="stat"><div class="stat-label">vs. always-capable</div><div class="stat-value" style="color:var(--good)">+4.0pp acc, -93.9% cost</div></div>
+      </div>
+      <p style="color:var(--muted); margin-bottom:0;">Verified across a full error-budget sweep (&epsilon;=0.05 to 0.50), not one cherry-picked value &mdash; &epsilon;=0.10 through 0.20 all beat the baseline on both accuracy and cost simultaneously. Full sweep in <code>results/budget_sweep.md</code>, ablation and Pareto frontier in <code>results/eval_report.md</code>. n=50 &mdash; confidence intervals are real and non-trivial (e.g. accuracy CI at &epsilon;=0.15 spans 86.5%-98.9%); treat this as a strong validated signal, not a settled number pending a larger eval set.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Honest limitations</h2>
+    <div class="panel">
+      <p style="color:var(--muted); margin-top:0;">Correctness labels come from GSM8K and MMLU, established peer-reviewed benchmarks pulled live from their canonical HuggingFace releases &mdash; not invented for this project. But both datasets have a documented, non-zero label-error rate in the research literature, and our own correctness check (a substring match against ground truth, not a real answer parser) adds further noise in both directions. The calibrator's training labels carry some irreducible baseline error &mdash; this isn't unique to this project, every benchmark-trained system inherits it, but it's stated here rather than left implicit.</p>
+      <p style="color:var(--muted); margin-bottom:0;">The cheap tier also changed mid-build: originally Groq's <code>openai/gpt-oss-120b</code>, which didn't support logprobs and hit an 8000-tokens/minute free-tier rate limit during bulk data collection. Switched to OpenAI's <code>gpt-5.4-nano</code>, which supports real logprobs and has far higher rate limits at this account's tier &mdash; a real pivot during the build, not the original plan.</p>
+    </div>
+  </section>
+
+  <footer>
+    Reproduction and extension of known industry routing patterns (RouteLLM, RouterBench) — not a claim of novel research.
+    <a href="https://github.com/Hariprashad-Ravikumar/Cost-Aware-Multi-Agent-LLM-Router" target="_blank">View source on GitHub</a>
+  </footer>
+</div>
+
+<script>
+mermaid.initialize({ startOnLoad: true, theme: "dark" });
+
+katex.render("P(\\text{correct}) = \\sigma(w \\cdot x + b), \\quad x = [\\text{logprob\\_unc},\\ \\text{self\\_consistency}, \\text{hard\\_cluster\\_dist}, \\text{resp\\_len}]",
+  document.getElementById("eq-logreg"), { displayMode: true });
+katex.render("\\text{use cheap tier if } (1 - P(\\text{correct})) \\le \\epsilon, \\text{ else escalate}",
+  document.getElementById("eq-decision"), { displayMode: true });
+katex.render("\\text{ECE} = \\sum_{m=1}^{M} \\frac{|B_m|}{n} \\left| \\text{acc}(B_m) - \\text{conf}(B_m) \\right|",
+  document.getElementById("eq-ece"), { displayMode: true });
+
+const examples = {
+  easy: "What is 15% of 240?",
+  hard: "Prove that the square root of 2 is irrational using a formal proof by contradiction, showing every logical step."
+};
+function fillExample(kind) {
+  document.getElementById("prompt-input").value = examples[kind];
+}
+
+async function runRoute() {
+  const btn = document.getElementById("submit-btn");
+  const status = document.getElementById("status");
+  const errorBox = document.getElementById("error-box");
+  const result = document.getElementById("result");
+  const prompt = document.getElementById("prompt-input").value.trim();
+  if (!prompt) return;
+
+  btn.disabled = true;
+  status.textContent = "routing...";
+  errorBox.textContent = "";
+  result.style.display = "none";
+  clearHighlight();
+
+  try {
+    const res = await fetch("/route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail.detail || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+
+    document.getElementById("r-tier").textContent = data.chosen_tier;
+    document.getElementById("r-pcorrect").textContent =
+      data.predicted_p_correct === null ? "n/a (uncalibrated tier)" : data.predicted_p_correct.toFixed(3);
+    document.getElementById("r-cost").textContent = "$" + data.cost_usd.toFixed(5);
+    document.getElementById("r-latency").textContent = data.latency_ms + " ms";
+    document.getElementById("r-answer").textContent = data.answer;
+    result.style.display = "block";
+    highlightTier(data.chosen_tier);
+    status.textContent = data.cache_hit ? "served from cache" : "";
+  } catch (e) {
+    errorBox.textContent = "Request failed: " + e.message;
+  } finally {
+    btn.disabled = false;
+    if (!errorBox.textContent) status.textContent = status.textContent || "";
+  }
+}
+
+function clearHighlight() {
+  document.querySelectorAll(".mermaid svg .node").forEach(n => n.style.filter = "");
+}
+
+function highlightTier(tier) {
+  // Mermaid renders node labels into elements with an id derived from the node's
+  // text; simplest robust approach here is matching on visible text content.
+  const label = { cheap: "cheap", mid: "mid", capable: "capable" }[tier];
+  if (!label) return;
+  document.querySelectorAll(".mermaid svg .node").forEach(node => {
+    const text = node.textContent.trim().toLowerCase();
+    if (text === label) {
+      node.style.filter = "drop-shadow(0 0 8px #34d399)";
+    }
+  });
+}
+</script>
+</body>
+</html>

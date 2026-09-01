@@ -1,0 +1,20 @@
+{"id": "hard_0", "prompt": "Prove that there are infinitely many prime numbers using Euclid's argument, showing every step.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_1", "prompt": "Prove Fermat's Last Theorem for n=4 using infinite descent, with full rigor.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_2", "prompt": "Write a formal proof that P != NP.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_3", "prompt": "Derive the Euler-Lagrange equation from the principle of stationary action for a functional depending on a function and its first derivative.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_4", "prompt": "Explain the exact quantum field theory calculation for the anomalous magnetic moment of the electron to 5 loops.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_5", "prompt": "Translate this sentence into classical Sanskrit using correct sandhi rules: The wise king protects his people.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_6", "prompt": "Prove that the square root of 2 is irrational using a formal proof by contradiction, showing every logical step.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_7", "prompt": "Derive the closed-form solution to a second-order linear homogeneous ODE with complex roots, including full derivation.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_8", "prompt": "Give a rigorous proof of the Cayley-Hamilton theorem for an arbitrary n x n matrix over a field.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_9", "prompt": "Explain in full technical detail how zero-knowledge succinct non-interactive arguments of knowledge (zk-SNARKs) achieve succinctness, including the polynomial commitment scheme.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_10", "prompt": "Derive the Navier-Stokes equations from first principles starting from conservation of momentum in a continuum.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_11", "prompt": "Prove the Banach fixed-point theorem and explain its role in proving existence/uniqueness for ODEs.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_12", "prompt": "Give a formal semantics for a simply-typed lambda calculus with a soundness proof for its type system.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_13", "prompt": "Explain the renormalization group flow of the coupling constant in phi^4 theory near the Wilson-Fisher fixed point.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_14", "prompt": "Derive the Chern-Gauss-Bonnet theorem for a compact Riemannian manifold without boundary.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_15", "prompt": "Prove Godel's first incompleteness theorem at the level of rigor expected in a graduate logic course.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_16", "prompt": "Explain the exact combinatorial proof of the hook length formula for the number of standard Young tableaux.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_17", "prompt": "Derive the Black-Scholes partial differential equation from the assumption of a geometric Brownian motion price process and a replicating portfolio argument.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_18", "prompt": "Give a rigorous treatment of Sylow's theorems and prove the first one in full.", "ground_truth": null, "source": "hard_ood"}
+{"id": "hard_19", "prompt": "Explain the derivation of the Wess-Zumino-Witten term in the context of chiral perturbation theory.", "ground_truth": null, "source": "hard_ood"}

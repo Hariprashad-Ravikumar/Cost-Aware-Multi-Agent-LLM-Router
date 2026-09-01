@@ -1,0 +1,18 @@
+{
+    "_comment_source_openai": "https://platform.openai.com/docs/pricing (gpt-5.4-nano, Standard tier, queried 2026-08-31 via live WebFetch)",
+    "_comment_source_gemini": "https://ai.google.dev/gemini-api/docs/pricing (Gemini 3.1 Flash-Lite, Standard tier, queried 2026-08-31, same as v1)",
+    "_comment_source_anthropic": "Anthropic claude-api skill pricing table (queried 2026-08-31): Claude Sonnet 5 = $2.00/1M input, $10.00/1M output",
+    "_comment_tier_reordering": "MID and CAPABLE swapped 2026-08-31 after discovering claude-haiku-4-5 ($1.00/$5.00) was priced above gemini-3.1-flash-lite ($0.25/$1.50), inverting the cost ladder - see CASE_STUDY.md. Gemini is now mid; Claude Sonnet 5 (genuinely priced and positioned above Gemini) is now capable.",
+    "gpt-5.4-nano": {
+        "input_cost_per_1m": 0.20,
+        "output_cost_per_1m": 1.25
+    },
+    "gemini-3.1-flash-lite": {
+        "input_cost_per_1m": 0.25,
+        "output_cost_per_1m": 1.50
+    },
+    "claude-sonnet-5": {
+        "input_cost_per_1m": 2.00,
+        "output_cost_per_1m": 10.00
+    }
+}

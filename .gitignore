@@ -39,3 +39,13 @@ n8n_data/
 .DS_Store
 .vscode/
 .idea/
+
+# v2 secrets, infra state, and model artifacts
+v2/.env
+v2/.env.local
+v2/models/*.pkl
+v2/postgres_data/
+v2/redis_data/
+v2/grafana_data/
+v2/.pytest_cache/
+*.db
