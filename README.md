@@ -101,6 +101,8 @@ No Postgres/Redis, no cloud deployment automation, no trained router model, no U
 
 ## v2: Calibrated Cost-Aware LLM Router
 
+**Live demo**: [calibrated-router-768949786238.us-central1.run.app](https://calibrated-router-768949786238.us-central1.run.app)
+
 This repo also contains a production-grade follow-up in [`v2/`](v2/) that replaces v1's prompted "rate 1-5" classifier with a genuinely calibrated statistics model (logistic regression, checked for calibration honesty via ECE/Brier, not just accuracy), served by a real FastAPI service (not n8n) with Postgres logging, Redis caching, retries + a circuit breaker on every provider call, Prometheus/Grafana observability, and a live interactive demo page.
 
 On a held-out 50-prompt evaluation, the calibrated router improves accuracy by 4 percentage points over always using the top-tier model while cutting cost by 93.9% — see [`v2/CASE_STUDY.md`](v2/CASE_STUDY.md) for the full architecture, the real bugs found and fixed along the way, and the honest limitations.

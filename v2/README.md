@@ -1,5 +1,7 @@
 # Calibrated Cost-Aware LLM Router (v2)
 
+**Live demo**: [calibrated-router-768949786238.us-central1.run.app](https://calibrated-router-768949786238.us-central1.run.app) (Cloud Run + Neon Postgres + Upstash Redis — first request after a cold start takes ~40s, warm requests run 2-3s)
+
 A production-grade follow-up to [v1](../README.md). Instead of asking an LLM to guess a prompt's difficulty, a small logistic-regression calibrator (trained on real labeled outcomes, checked for calibration honesty via ECE/Brier — not just accuracy) predicts the probability that a cheap model's draft answer is correct, and the router only escalates to a pricier tier when that predicted error exceeds a configured budget. Served by a real FastAPI service — Postgres logging, Redis caching, retries and a circuit breaker on every provider call, Prometheus/Grafana observability — not a no-code orchestrator.
 
 Full writeup, architecture, real engineering findings (including a broken third-party dependency caught before shipping, a rate-limit discovery, and a tier-pricing inversion that made the whole router pointless until fixed), and honest limitations: **[CASE_STUDY.md](CASE_STUDY.md)**.

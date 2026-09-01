@@ -11,6 +11,13 @@ COPY alembic.ini .
 COPY config ./config
 COPY models ./models
 
+# Pre-download the sentence-transformers embedding model at build time instead of
+# lazily on first request - the lazy-load path hit HuggingFace's unauthenticated rate
+# limit on Cloud Run (every scale-to-zero cold start is a fresh container re-downloading
+# the same model) and crashed the first deploy. Baking it into the image removes both
+# the network dependency and the rate-limit exposure from the request path entirely.
+RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
 EXPOSE 8000
 
 # Cloud Run injects the actual listen port via $PORT (defaults to 8080, not 8000) and
