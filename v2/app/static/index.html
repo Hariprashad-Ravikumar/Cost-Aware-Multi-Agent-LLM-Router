@@ -6,225 +6,746 @@
 <title>Calibrated Cost-Aware LLM Router</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.0/purify.min.js"></script>
 <style>
   :root {
-    --bg: #0b0d12;
-    --panel: #131722;
-    --panel-border: #232838;
+    --bg: #05060a;
+    --panel: rgba(19, 23, 34, 0.58);
+    --panel-solid: #131722;
+    --panel-border: rgba(120, 130, 160, 0.16);
     --text: #e6e9f0;
-    --muted: #8b93a7;
+    --muted: #9099b0;
     --accent: #5b8cff;
     --openai: #10a37f;
     --anthropic: #d97757;
     --gemini: #4285f4;
+    --feature: #8b5cf6;
+    --calibrator: #f59e0b;
+    --decision: #22d3ee;
     --good: #34d399;
     --warn: #fbbf24;
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
-    line-height: 1.55;
+    font: 100%/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
   }
-  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 96px; }
-  header { margin-bottom: 40px; }
-  h1 { font-size: 1.8rem; margin: 0 0 8px; font-weight: 650; letter-spacing: -0.01em; }
-  .pitch { color: var(--muted); font-size: 1.02rem; margin: 0 0 20px; max-width: 640px; }
-  .badges { display: flex; gap: 8px; flex-wrap: wrap; }
-  .badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+
+  /* ---------- animated background ---------- */
+  .bg-gradient {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(circle at 18% 25%, rgba(37, 60, 120, 0.34) 0%, transparent 46%),
+      radial-gradient(circle at 82% 20%, rgba(30, 70, 55, 0.28) 0%, transparent 46%),
+      radial-gradient(circle at 55% 85%, rgba(70, 40, 90, 0.22) 0%, transparent 50%),
+      var(--bg);
+    background-size: 180% 180%, 180% 180%, 180% 180%, 100% 100%;
+    animation: gradientFlow 46s ease-in-out infinite;
+  }
+  @keyframes gradientFlow {
+    0%   { background-position: 0% 20%, 100% 0%, 50% 100%, 0 0; }
+    50%  { background-position: 60% 70%, 30% 60%, 70% 30%, 0 0; }
+    100% { background-position: 0% 20%, 100% 0%, 50% 100%, 0 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bg-gradient { animation: none; }
+  }
+
+  a { color: var(--accent); }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; }
+  svg.icon { display: block; flex: none; }
+
+  /* ---------- glass materials ---------- */
+  .glass {
+    background: var(--panel);
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
     border: 1px solid var(--panel-border);
+    border-top-color: rgba(255,255,255,0.12);
   }
-  .dot { width: 8px; height: 8px; border-radius: 50%; }
-  section { margin: 40px 0; }
-  h2 { font-size: 1.15rem; font-weight: 650; margin: 0 0 16px; display: flex; align-items: center; gap: 8px; }
-  h2::before { content: ""; width: 3px; height: 16px; background: var(--accent); border-radius: 2px; }
-  .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px; }
-  .mermaid { background: var(--panel); border-radius: 12px; }
+  @media (prefers-reduced-transparency: reduce) {
+    .glass { background: var(--panel-solid); backdrop-filter: none; }
+  }
+
+  /* "Try it live" gets a faint accent wash to read as the primary interactive
+     surface, per the material-hierarchy principle - same blur/border system as the
+     other two panels, just tinted rather than a different material entirely. */
+  .col-right.glass {
+    background: linear-gradient(165deg, color-mix(in srgb, var(--accent) 12%, var(--panel)) 0%, var(--panel) 60%);
+    border-color: color-mix(in srgb, var(--accent) 20%, var(--panel-border));
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .col-right.glass { background: color-mix(in srgb, var(--accent) 6%, var(--panel-solid)); }
+  }
+
+  /* ---------- page shell + top-center header ---------- */
+  .page { display: flex; flex-direction: column; height: 100vh; min-height: 660px; }
+  .top-header { text-align: center; padding: 14px 16px 2px; flex: none; }
+  .site-title {
+    font-size: 1.85rem; font-weight: 800; letter-spacing: -0.02em; margin: 0;
+    color: var(--text);
+  }
+  .site-sub { font-size: 0.76rem; color: var(--muted); margin: 5px 0 0; letter-spacing: 0; }
+
+  /* ---------- IDE layout (above the fold) ---------- */
+  .ide {
+    display: grid;
+    grid-template-columns: 400px 480px 1fr;
+    flex: 1;
+    min-height: 0;
+    padding: 12px 14px 14px;
+    gap: 14px;
+  }
+  .col { border-radius: 14px; padding: 16px; overflow-y: auto; min-height: 0; }
+  .col-left { display: flex; flex-direction: column; gap: 14px; }
+  .col-center { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  .col-right { display: flex; flex-direction: column; gap: 14px; }
+
+  .section-label {
+    font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin: 0 0 8px;
+  }
+
+  .providers { display: flex; flex-direction: column; gap: 8px; }
+  .provider-chip {
+    display: flex; flex-direction: row; align-items: center; gap: 12px;
+    padding: 12px 14px; border-radius: 12px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--panel-border);
+  }
+  .provider-chip svg.icon { width: 26px; height: 26px; flex: none; }
+  .pc-text { display: flex; flex-direction: row; align-items: baseline; gap: 9px; line-height: 1.25; min-width: 0; flex: 1 1 auto; }
+  .pc-name { font-size: 0.82rem; font-weight: 750; white-space: nowrap; }
+  .pc-model {
+    font-size: 0.82rem; color: var(--text); font-weight: 700;
+    font-family: "SF Mono", Menlo, Consolas, monospace; white-space: nowrap;
+  }
+  .provider-chip .role {
+    flex: none; margin-left: auto; font-size: 0.62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.03em;
+    padding: 4px 10px; border-radius: 999px; color: var(--role-color, var(--muted));
+    background: color-mix(in srgb, var(--role-color, var(--muted)) 16%, transparent);
+  }
+  .provider-chip[data-provider="openai"] .role { --role-color: var(--openai); }
+  .provider-chip[data-provider="gemini"] .role { --role-color: var(--gemini); }
+  .provider-chip[data-provider="anthropic"] .role { --role-color: var(--anthropic); }
+
+  .hero-mini {
+    border-radius: 14px; padding: 20px 20px 18px;
+    background: linear-gradient(160deg, rgba(24,68,50,0.55), rgba(11,13,18,0.2) 75%);
+    border: 1px solid rgba(52,120,90,0.35);
+  }
+  .hero-mini .headline {
+    font-size: 2.6rem; font-weight: 800; color: var(--good);
+    letter-spacing: -0.035em; line-height: 1.0; margin: 0 0 12px;
+  }
+  .hero-mini .sub { font-size: 0.9rem; color: var(--text); opacity: 0.9; margin: 0 0 12px; line-height: 1.55; letter-spacing: -0.005em; }
+  .hero-mini .scale { font-size: 0.92rem; color: var(--muted); margin: 0; line-height: 1.5; }
+  .hero-mini .scale strong { color: var(--good); font-weight: 750; font-size: 1.05em; }
+  .hero-mini .scale sup { font-size: 0.6em; }
+  .hero-mini .scale-caveat { font-size: 0.86em; color: var(--muted); }
+
+  .footnote { font-size: 0.68rem; color: var(--muted); opacity: 0.85; margin: 10px 0 0; line-height: 1.55; }
+
+  .left-footer { margin-top: auto; font-size: 0.68rem; color: var(--muted); line-height: 1.5; }
+  .left-footer a { color: var(--muted); text-decoration: underline; }
+
+  .col-center h2 { padding: 12px 16px 0; margin: 0; }
+
+  h2 {
+    font-size: 0.82rem; font-weight: 700; margin: 0 0 10px;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  h2::before { content: ""; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
+
+  /* ---------- custom architecture diagram ---------- */
+  #diagram { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px; padding: 8px 26px 10px; overflow-y: auto; }
+
+  .pipeline-col { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+  .pipeline-col .pnode { flex: none; width: 100%; }
+  .pnode {
+    flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 7px 8px; border-radius: 12px; border: 1px solid var(--panel-border);
+    background: rgba(0,0,0,0.24); text-align: center; opacity: 0.55;
+    transition: opacity 0.2s ease, box-shadow 0.2s ease;
+  }
+  .pnode .icon-row { display: flex; align-items: center; justify-content: center; gap: 6px; height: 24px; }
+  .pnode .label { font-size: 0.82rem; font-weight: 750; line-height: 1.2; white-space: nowrap; }
+  .pnode .sub { font-size: 0.68rem; color: var(--muted); font-family: "SF Mono", Menlo, Consolas, monospace; }
+
+  /* vertical connector between two stacked pipeline nodes - port dots top/bottom
+     colored to the stage this edge feeds into, shimmer + token travel top-to-bottom. */
+  .edge { position: relative; width: 2px; height: 12px; margin: 0 auto; background: rgba(120,130,160,0.35); overflow: visible; }
+  .edge::before {
+    content: ""; position: absolute; top: 0; left: 50%; width: 5px; height: 5px;
+    margin: -2.5px 0 0 -2.5px; border-radius: 50%;
+    background: var(--stage-color, var(--muted));
+    box-shadow: 0 0 4px var(--stage-color, var(--muted)), 0 12px 0 var(--stage-color, var(--muted)), 0 12px 4px var(--stage-color, var(--muted));
+    opacity: 0.9;
+  }
+  .edge::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent, rgba(91,140,255,0.65), transparent);
+    background-size: 100% 250%; opacity: 0.55;
+    animation: edgeShimmer 8s linear infinite;
+  }
+  .edge .token {
+    position: absolute; top: 0; left: 50%; width: 6px; height: 6px; margin-left: -3px;
+    border-radius: 50%; background: var(--stage-color, var(--accent)); box-shadow: 0 0 7px var(--stage-color, var(--accent));
+    opacity: 0;
+  }
+  .edge.processing .token { opacity: 1; animation: tokenTravel 1.6s linear infinite; }
+  @keyframes tokenTravel { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+  @keyframes edgeShimmer { 0% { background-position: 0 250%; } 100% { background-position: 0 -250%; } }
+  @media (prefers-reduced-motion: reduce) {
+    .edge::after { animation: none; opacity: 0.25; }
+    .edge.processing .token { animation: none; opacity: 0.8; top: 50%; }
+  }
+  .edge[data-edge="prompt-draft"] { --stage-color: var(--openai); }
+  .edge[data-edge="draft-feature"] { --stage-color: var(--feature); }
+  .edge[data-edge="feature-calibrator"] { --stage-color: var(--calibrator); }
+  .edge[data-edge="calibrator-decision"] { --stage-color: var(--decision); }
+
+  @keyframes nodeCascade {
+    0%, 100% { opacity: 0.4; box-shadow: none; }
+    50% { opacity: 1; box-shadow: 0 0 14px var(--stage-color, var(--accent)); }
+  }
+  .pnode.processing { animation: nodeCascade 1.6s ease-in-out infinite; }
+  .pnode[data-node="prompt"] { --stage-color: var(--accent); }
+  .pnode[data-node="draft"] { --stage-color: var(--openai); }
+  .pnode[data-node="feature"] { --stage-color: var(--feature); }
+  .pnode[data-node="calibrator"] { --stage-color: var(--calibrator); }
+  .pnode[data-node="decision"] { --stage-color: var(--decision); }
+  .pnode[data-node="draft"].processing { animation-delay: 0.15s; }
+  .pnode[data-node="feature"].processing { animation-delay: 0.3s; }
+  .pnode[data-node="calibrator"].processing { animation-delay: 0.45s; }
+  .pnode[data-node="decision"].processing { animation-delay: 0.6s; }
+  .edge[data-edge="draft-feature"].processing .token { animation-delay: 0.15s; }
+  .edge[data-edge="feature-calibrator"].processing .token { animation-delay: 0.3s; }
+  .edge[data-edge="calibrator-decision"].processing .token { animation-delay: 0.45s; }
+  @media (prefers-reduced-motion: reduce) {
+    .pnode.processing { animation: none; opacity: 0.85; box-shadow: 0 0 8px var(--stage-color, var(--accent)); }
+  }
+
+  /* feature-extraction scatter dots */
+  .fx-dots { position: relative; width: 34px; height: 34px; }
+  .fx-dot { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--feature); top: 50%; left: 50%; opacity: 0; }
+  .pnode[data-node="feature"].processing .fx-dot { animation: fxScatter 1.6s ease-in-out infinite; animation-delay: 0.3s; }
+  .fx-dot:nth-child(1) { --dx: -11px; --dy: -9px; }
+  .fx-dot:nth-child(2) { --dx: 11px; --dy: -9px; }
+  .fx-dot:nth-child(3) { --dx: -11px; --dy: 9px; }
+  .fx-dot:nth-child(4) { --dx: 11px; --dy: 9px; }
+  @keyframes fxScatter {
+    0%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+    45% { opacity: 1; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1); }
+    80% { opacity: 0.8; transform: translate(-50%, -50%) scale(0.6); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pnode[data-node="feature"].processing .fx-dot { animation: none; opacity: 0.7; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))); }
+  }
+
+  /* calibrator sigmoid */
+  .sigmoid-wrap svg { width: 60px; height: 30px; }
+  .sigmoid-curve { fill: none; stroke: var(--calibrator); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 90; stroke-dashoffset: 90; }
+  .pnode[data-node="calibrator"].processing .sigmoid-curve { animation: drawSigmoid 1.6s ease-in-out infinite; animation-delay: 0.45s; }
+  @keyframes drawSigmoid { 0% { stroke-dashoffset: 90; } 65%, 100% { stroke-dashoffset: 0; } }
+  .sigmoid-marker { fill: var(--calibrator); opacity: 0; transition: none; }
+  .sigmoid-marker.show { opacity: 1; }
+  .pnode[data-node="calibrator"].settled .sigmoid-curve { stroke-dashoffset: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    .sigmoid-curve { stroke-dashoffset: 0; }
+  }
+
+  /* fan-out into tiers */
+  .fanout { height: 24px; margin: 0 auto; width: 66%; }
+  .fanout svg { width: 100%; height: 100%; }
+  .fedge { fill: none; stroke: rgba(120,130,160,0.3); stroke-width: 1.5; }
+  .fedge.won { stroke-width: 2.8; }
+  .fedge[data-fedge="cheap"].won { stroke: var(--openai); }
+  .fedge[data-fedge="mid"].won { stroke: var(--gemini); }
+  .fedge[data-fedge="capable"].won { stroke: var(--anthropic); }
+
+  .tier-row { display: flex; justify-content: center; gap: 14px; padding: 0 8px; }
+  .pnode.tier { flex: 0 1 130px; opacity: 0.42; cursor: default; }
+  .pnode.tier .icon-row svg.icon { width: 22px; height: 22px; }
+  .pnode.tier .label { text-transform: uppercase; letter-spacing: 0.03em; }
+  .pnode.tier.won { opacity: 1; transition: none; }
+  .pnode.tier[data-tier="cheap"].won { box-shadow: 0 0 20px var(--openai); border-color: var(--openai); }
+  .pnode.tier[data-tier="mid"].won { box-shadow: 0 0 20px var(--gemini); border-color: var(--gemini); }
+  .pnode.tier[data-tier="capable"].won { box-shadow: 0 0 20px var(--anthropic); border-color: var(--anthropic); }
+
+  .infra-strip {
+    display: flex; justify-content: center; align-items: center; gap: 14px;
+    padding: 4px 14px 0; font-size: 0.58rem; color: var(--muted);
+  }
+  .infra-strip span { display: inline-flex; align-items: center; gap: 4px; }
+  .infra-strip svg { width: 10px; height: 10px; fill: var(--muted); }
+  .dep-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    margin-left: 5px; background: var(--muted); opacity: 0.5;
+  }
+  .dep-dot.ok { background: var(--good); opacity: 1; box-shadow: 0 0 5px var(--good); }
+  .dep-dot.bad { background: #f87171; opacity: 1; box-shadow: 0 0 5px #f87171; }
+  .live-metric { color: var(--muted); opacity: 0.85; font-variant-numeric: tabular-nums; margin-left: 2px; }
+
+  .results-strip { display: flex; gap: 8px; padding: 4px 16px 4px; }
+  .rs-item { flex: 1; min-width: 0; background: rgba(0,0,0,0.22); border: 1px solid var(--panel-border); border-radius: 9px; padding: 6px 10px; }
+  .rs-label { font-size: 0.58rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .rs-value { display: block; font-size: 0.8rem; font-weight: 700; margin-top: 2px; letter-spacing: -0.005em; }
+  .rs-vs { font-size: 0.6rem; color: var(--muted); font-weight: 500; }
+  .rs-highlight .rs-value { color: var(--good); }
+
   textarea {
-    width: 100%; min-height: 90px; background: #0e1119; color: var(--text);
-    border: 1px solid var(--panel-border); border-radius: 8px; padding: 12px;
-    font-family: inherit; font-size: 0.95rem; resize: vertical;
+    width: 100%; min-height: 44px; max-height: 140px; background: rgba(0,0,0,0.25); color: var(--text);
+    border: 1px solid var(--panel-border); border-radius: 10px; padding: 11px 12px;
+    font-family: inherit; font-size: 0.85rem; resize: none;
   }
-  .row { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
   button {
     background: var(--accent); color: white; border: none; border-radius: 8px;
-    padding: 10px 18px; font-weight: 600; cursor: pointer; font-size: 0.9rem;
+    padding: 8px 14px; font-weight: 600; cursor: pointer; font-size: 0.82rem;
+    transition: transform 100ms ease-out;
   }
+  button:active { transform: scale(0.97); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .examples button { background: var(--panel); color: var(--muted); border: 1px solid var(--panel-border); font-weight: 500; font-size: 0.8rem; padding: 6px 12px; }
-  #result { margin-top: 18px; display: none; }
-  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 14px; }
-  .stat { background: #0e1119; border: 1px solid var(--panel-border); border-radius: 8px; padding: 10px 12px; }
-  .stat-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-  .stat-value { font-size: 1.1rem; font-weight: 650; margin-top: 2px; }
-  .answer-box { background: #0e1119; border: 1px solid var(--panel-border); border-radius: 8px; padding: 14px; white-space: pre-wrap; font-size: 0.9rem; max-height: 260px; overflow-y: auto; }
-  .eq { padding: 14px 4px; overflow-x: auto; }
-  pre { background: #0e1119; border: 1px solid var(--panel-border); border-radius: 8px; padding: 14px; overflow-x: auto; font-size: 0.82rem; }
-  code { font-family: "SF Mono", Menlo, Consolas, monospace; }
-  .error { color: #f87171; font-size: 0.88rem; margin-top: 10px; }
-  footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--panel-border); padding-top: 20px; margin-top: 60px; }
-  footer a { color: var(--accent); }
-  .todo-note { color: var(--warn); font-size: 0.8rem; font-style: italic; }
 
-  .hero-card {
-    background: linear-gradient(160deg, #0e2a20, #0b0d12 70%);
-    border: 1px solid #1f4d3a; border-radius: 16px;
-    padding: 28px 28px 24px; margin-bottom: 40px;
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .stat { background: rgba(0,0,0,0.22); border: 1px solid var(--panel-border); border-radius: 8px; padding: 8px 10px; }
+  .stat-label { font-size: 0.64rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-value { font-size: 0.94rem; font-weight: 650; margin-top: 2px; letter-spacing: -0.01em; }
+
+  /* ---------- try-it-live chat ---------- */
+  .col-right { overflow: hidden; }
+  .chat-log {
+    flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;
+    gap: 16px; padding: 4px 4px 4px 0; margin: 4px 0 0;
   }
-  .hero-headline { font-size: 2.1rem; font-weight: 750; letter-spacing: -0.01em; color: var(--good); margin: 0 0 8px; line-height: 1.15; }
-  .hero-sub { color: var(--text); font-size: 0.95rem; margin: 0 0 14px; }
-  .hero-scale { font-size: 1rem; font-weight: 650; margin: 0; }
-  .hero-caption { color: var(--muted); font-size: 0.75rem; margin: 4px 0 0; }
+  .chat-empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; text-align: center; color: var(--muted); padding: 20px;
+  }
+  .chat-empty-hint { font-size: 0.82rem; margin: 0; }
+  .chat-suggestions { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
+  .chip {
+    background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; font-weight: 500;
+    text-align: left; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, transform 100ms ease-out;
+  }
+  .chip:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.24); }
+  .chip:active { transform: scale(0.98); }
 
-  .counter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-top: 16px; }
-  .counter-card { background: #0e1119; border: 1px solid var(--panel-border); border-radius: 10px; padding: 14px 16px; }
-  .counter-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-  .counter-value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .chat-turn { display: flex; }
+  .chat-turn.user { justify-content: flex-end; }
+  .bubble-user {
+    max-width: 78%; background: var(--accent); color: white; border-radius: 16px 16px 4px 16px;
+    padding: 10px 14px; font-size: 0.86rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  }
+  .turn-assistant { width: 100%; }
+  .model-badge {
+    display: flex; align-items: center; gap: 6px; font-size: 0.74rem; color: var(--muted);
+    margin-bottom: 7px;
+  }
+  .model-badge strong { color: var(--text); font-weight: 650; }
+  .assistant-answer.typing::after {
+    content: ""; display: inline-block; width: 2px; height: 0.9em; margin-left: 2px;
+    background: var(--accent); vertical-align: text-bottom; animation: caretBlink 0.9s step-end infinite;
+  }
+  @keyframes caretBlink { 50% { opacity: 0; } }
+  .assistant-status { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .assistant-status .dot-pulse {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+    animation: dotPulse 1s ease-in-out infinite;
+  }
+  @keyframes dotPulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .assistant-status .dot-pulse { animation: none; opacity: 0.7; }
+    .assistant-answer.typing::after { animation: none; }
+  }
+  .assistant-answer { font-size: 0.86rem; line-height: 1.6; color: var(--text); }
+  .assistant-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .meta-chip {
+    font-size: 0.66rem; color: var(--muted); background: rgba(0,0,0,0.22);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: 3px 8px;
+  }
+  .meta-chip strong { color: var(--text); font-weight: 650; }
+  .turn-error .assistant-answer { color: #f87171; }
+
+  .composer { flex: none; padding-top: 12px; margin-top: 8px; }
+  .composer-pill {
+    display: flex; align-items: flex-end; gap: 6px;
+    background: rgba(0,0,0,0.28); border: 1px solid var(--panel-border);
+    border-radius: 22px; padding: 6px 6px 6px 16px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .composer-pill:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  .composer-pill textarea {
+    flex: 1; border: none; background: transparent; padding: 9px 0; min-height: 22px; max-height: 140px;
+  }
+  .composer-pill textarea:focus { outline: none; }
+  .send-btn {
+    flex: none; width: 36px; height: 36px; border-radius: 50%; margin-bottom: 2px;
+    background: var(--accent); color: white; border: none;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: background 0.15s ease, transform 100ms ease-out;
+  }
+  .send-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 82%, white); }
+  .send-btn:active:not(:disabled) { transform: scale(0.92); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .counter-panel { margin-top: auto; }
+  .counter-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .counter-card {
+    display: flex; align-items: baseline; justify-content: space-between;
+    background: rgba(0,0,0,0.22); border: 1px solid var(--panel-border); border-radius: 8px; padding: 8px 10px;
+  }
+  .counter-label { font-size: 0.68rem; color: var(--muted); }
+  .counter-value { font-size: 0.92rem; font-weight: 700; font-variant-numeric: tabular-nums; }
   .counter-value.actual { color: var(--good); }
   .counter-value.hypothetical { color: var(--muted); text-decoration: line-through; text-decoration-color: #4a5266; }
   .counter-saved { color: var(--good); }
+  .counter-note { color: var(--muted); font-size: 0.64rem; margin: 6px 0 0; line-height: 1.4; }
+
+  /* ---------- below-fold content ---------- */
+  #below-fold { max-width: 920px; margin: 0 auto; padding: 32px 24px 96px; }
+  #below-fold section { margin: 40px 0; }
+  #below-fold h2 { font-size: 1.1rem; text-transform: none; letter-spacing: -0.005em; color: var(--text); }
+  #below-fold h2::before { height: 16px; }
+  .panel { background: var(--panel-solid); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px; }
+  .eq { padding: 14px 4px; overflow-x: auto; }
+
+  /* ---------- terminal-style code block ---------- */
+  .terminal-window {
+    background: #0a0c12; border: 1px solid var(--panel-border); border-radius: 10px;
+    overflow: hidden; box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+  }
+  .terminal-chrome {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    background: #12141c; border-bottom: 1px solid var(--panel-border);
+  }
+  .terminal-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .terminal-dot.red { background: #ff5f57; }
+  .terminal-dot.yellow { background: #febc2e; }
+  .terminal-dot.green { background: #28c840; }
+  .terminal-title {
+    margin-left: 8px; font-size: 0.72rem; color: var(--muted);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  .terminal-window pre {
+    background: #0e1119; border: none; border-radius: 0; padding: 16px; margin: 0;
+    overflow-x: auto; font-size: 0.82rem; line-height: 1.6;
+  }
+  .term-cursor {
+    display: inline-block; width: 8px; height: 1em; margin-left: 2px;
+    background: var(--good); vertical-align: text-bottom; animation: caretBlink 0.9s step-end infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .term-cursor { animation: none; }
+  }
+  #below-fold .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  #below-fold .stat-value { font-size: 1.05rem; }
+  #below-fold p { color: var(--muted); }
+
+  /* ---------- citations + bibliography ---------- */
+  .cite {
+    font-size: 0.68em; vertical-align: super; margin-left: 1px;
+    color: var(--accent); text-decoration: none; font-weight: 700;
+  }
+  .cite:hover { text-decoration: underline; }
+  .bibliography {
+    list-style: none; margin: 0; padding: 0; counter-reset: bib;
+    font-size: 0.78rem; color: var(--muted); line-height: 1.7;
+  }
+  .bibliography li {
+    padding: 4px 6px 4px 2.4em; text-indent: -2.2em; margin-bottom: 4px;
+    border-radius: 6px; scroll-margin-top: 24px;
+  }
+  .bibliography li::before {
+    content: "[" counter(bib) "] "; counter-increment: bib;
+    color: var(--text); font-weight: 700; font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  .bibliography li:target { background: rgba(91,140,255,0.14); }
+  .bibliography a { color: var(--accent); }
+  footer {
+    color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--panel-border);
+    padding: 16px 0 0 14px; margin-top: 60px; display: flex; gap: 16px; flex-wrap: wrap;
+    position: relative;
+  }
+  footer::before { content: ""; position: absolute; left: 0; top: 16px; bottom: auto; width: 3px; height: 14px; background: var(--accent); border-radius: 2px; }
+  footer span:first-child { color: var(--text); opacity: 0.85; font-weight: 500; }
+
+  @media (max-width: 1100px) {
+    .page { height: auto; }
+    .ide { display: block; height: auto; }
+    .col { margin-bottom: 14px; overflow: visible; }
+    .col-center { min-height: 420px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="hero-card">
-    <p class="hero-headline">93.9% cheaper. No measurable quality loss.</p>
-    <p class="hero-sub">$0.00569 vs $0.09387 per 50 prompts &middot; 96.0% vs 92.0% accuracy (95% CIs overlap) &middot; n=50, verified end-to-end on a held-out set never seen during training.</p>
-    <p class="hero-scale">At 1M requests/month: $113.80 vs $1,877.40 &mdash; <span style="color:var(--good)">$21,163/year saved</span></p>
-    <p class="hero-caption">Illustrative projection from the measured per-prompt cost above, not a claim about any specific deployment's traffic. Full methodology: <code>CASE_STUDY.md</code>.</p>
-  </div>
+<div class="bg-gradient"></div>
 
-  <header>
-    <h1>Calibrated Cost-Aware LLM Router</h1>
-    <p class="pitch">Routes each prompt to the cheapest model tier a small, calibrated statistics model predicts will still get it right — not an LLM guessing "how hard is this," a logistic regression trained on real labeled outcomes.</p>
-    <div class="badges">
-      <span class="badge"><span class="dot" style="background:var(--openai)"></span>OpenAI gpt-5.4-nano &middot; cheap tier</span>
-      <span class="badge"><span class="dot" style="background:var(--gemini)"></span>Gemini 3.1 Flash-Lite &middot; mid tier</span>
-      <span class="badge"><span class="dot" style="background:var(--anthropic)"></span>Claude Sonnet 5 &middot; capable tier</span>
-    </div>
+<div class="page">
+  <header class="top-header">
+    <h1 class="site-title">Calibrated Cost-Aware LLM Router</h1>
+    <p class="site-sub">A logistic-regression calibrator, trained on real labeled outcomes, routes each prompt to the cheapest model tier that's still likely to get it right.</p>
   </header>
 
-  <section>
-    <h2>Architecture</h2>
-    <div class="mermaid" id="diagram">
-graph LR
-  A[Prompt] --> B["Draft call<br/>(OpenAI cheap tier)"]
-  B --> C[Feature extraction]
-  C --> D[Calibrator<br/>logistic regression]
-  D --> E{"Decision:<br/>error budget check"}
-  E -->|"P(correct) high enough"| F[cheap]
-  E -->|escalate| G[mid]
-  E -->|escalate further| H[capable]
-    </div>
-  </section>
+  <div class="ide">
+    <!-- LEFT: providers, compact hero -->
+    <div class="col col-left glass">
+      <div>
+        <p class="section-label">Model tiers</p>
+        <div class="providers">
+          <div class="provider-chip" data-provider="anthropic">
+            <svg class="icon" viewBox="0 0 24 24" style="fill:var(--anthropic)"><path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/></svg>
+            <div class="pc-text"><span class="pc-model">Claude Sonnet 5</span></div>
+            <span class="role">capable<span class="dep-dot" id="breaker-anthropic" title="checking..."></span></span>
+          </div>
+          <div class="provider-chip" data-provider="gemini">
+            <svg class="icon" viewBox="0 0 24 24" style="fill:var(--gemini)"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></svg>
+            <div class="pc-text"><span class="pc-model">Gemini 3.1 Flash Lite</span></div>
+            <span class="role">mid<span class="dep-dot" id="breaker-gemini" title="checking..."></span></span>
+          </div>
+          <div class="provider-chip" data-provider="openai">
+            <svg class="icon" viewBox="0 0 24 24" style="fill:var(--openai)"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>
+            <div class="pc-text"><span class="pc-model">GPT 5.4 nano</span></div>
+            <span class="role">cheap<span class="dep-dot" id="breaker-openai" title="checking..."></span></span>
+          </div>
+        </div>
+      </div>
 
-  <section>
-    <h2>Try it live</h2>
-    <div class="panel">
-      <textarea id="prompt-input" placeholder="Type a prompt — try something trivial, then something like a formal proof...">What is 15% of 240?</textarea>
-      <div class="row examples">
-        <button onclick="fillExample('easy')">Easy example</button>
-        <button onclick="fillExample('hard')">Hard example</button>
+      <div class="hero-mini">
+        <p class="headline">93.9% cheaper</p>
+        <p class="sub">No measurable quality loss: 96.0% vs 92.0% accuracy, CIs overlap (n=50, held-out set).</p>
+        <p class="scale">At 1M req/mo: <strong>$21,163/yr saved</strong> <span class="scale-caveat">(illustrative, extrapolated)</span><sup>1</sup></p>
+        <p class="footnote">&sup1; Extrapolated from the measured $0.0018774/prompt average rate (<code>results/eval_report.md</code>), not a claim about any specific deployment's real traffic.</p>
       </div>
-      <div class="row">
-        <button id="submit-btn" onclick="runRoute()">Route this prompt</button>
-        <span id="status" style="color:var(--muted); font-size:0.85rem;"></span>
-      </div>
-      <div id="result">
-        <div class="stat-grid">
-          <div class="stat"><div class="stat-label">Chosen tier</div><div class="stat-value" id="r-tier">-</div></div>
-          <div class="stat"><div class="stat-label">P(correct)</div><div class="stat-value" id="r-pcorrect">-</div></div>
-          <div class="stat"><div class="stat-label">Cost</div><div class="stat-value" id="r-cost">-</div></div>
-          <div class="stat"><div class="stat-label">Latency</div><div class="stat-value" id="r-latency">-</div></div>
-        </div>
-        <div class="answer-box" id="r-answer"></div>
-      </div>
-      <div class="error" id="error-box"></div>
-    </div>
 
-    <div class="panel" style="margin-top:16px;" id="counter-panel" hidden>
-      <h2 style="margin-bottom:8px;">Cost savings meter &mdash; this session</h2>
-      <p style="color:var(--muted); font-size:0.82rem; margin:0 0 4px;">Live running total from your actual requests above, vs. what those same prompts would have cost if every one had gone straight to the capable tier (Claude Sonnet 5) &mdash; using the real measured average rate from the 50-prompt evaluation ($0.0018774/prompt), not a live re-query.</p>
-      <div class="counter-grid">
-        <div class="counter-card">
-          <div class="counter-label">Actually spent</div>
-          <div class="counter-value actual" id="c-actual">$0.000000</div>
-        </div>
-        <div class="counter-card">
-          <div class="counter-label">Would have spent</div>
-          <div class="counter-value hypothetical" id="c-hypothetical">$0.000000</div>
-        </div>
-        <div class="counter-card">
-          <div class="counter-label">Saved</div>
-          <div class="counter-value counter-saved" id="c-saved">$0.000000 (0%)</div>
-        </div>
+      <div class="left-footer">
+        Math, results, and honest limitations below &darr;<br>
+        <a href="https://github.com/Hariprashad-Ravikumar/Cost-Aware-Multi-Agent-LLM-Router" target="_blank">View source on GitHub</a>
       </div>
     </div>
-  </section>
 
+    <!-- CENTER: architecture diagram -->
+    <div class="col col-center glass">
+      <h2>Architecture (live)</h2>
+      <div id="diagram">
+        <div class="pipeline-col">
+          <div class="pnode" data-node="prompt">
+            <div class="icon-row">
+              <svg class="icon" viewBox="0 0 24 24" width="26" height="26" style="fill:var(--accent)"><path d="M12 2 3 7v10l9 5 9-5V7Zm0 2.31L18.5 8 12 11.7 5.5 8Zm-7 4.4 6 3.34v6.64l-6-3.34Zm8 9.98v-6.64l6-3.34v6.64Z"/></svg>
+            </div>
+            <div class="label">Prompt</div>
+          </div>
+          <div class="edge" data-edge="prompt-draft"><div class="token"></div></div>
+
+          <div class="pnode" data-node="draft">
+            <div class="icon-row">
+              <svg class="icon" viewBox="0 0 24 24" width="26" height="26" style="fill:var(--openai)"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>
+              <svg class="icon" viewBox="0 0 24 24" width="18" height="18" style="fill:var(--muted)"><path d="M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z"/></svg>
+            </div>
+            <div class="label">Draft call</div>
+            <div class="sub">GPT 5.4 nano</div>
+          </div>
+          <div class="edge" data-edge="draft-feature"><div class="token"></div></div>
+
+          <div class="pnode" data-node="feature">
+            <div class="icon-row"><div class="fx-dots"><span class="fx-dot"></span><span class="fx-dot"></span><span class="fx-dot"></span><span class="fx-dot"></span></div></div>
+            <div class="label">Feature extraction</div>
+          </div>
+          <div class="edge" data-edge="feature-calibrator"><div class="token"></div></div>
+
+          <div class="pnode" data-node="calibrator">
+            <div class="icon-row sigmoid-wrap">
+              <svg viewBox="0 0 60 30">
+                <path class="sigmoid-curve" d="M2,27 C15,27 20,3 30,15 C40,27 45,3 58,3" />
+                <circle class="sigmoid-marker" cx="30" cy="15" r="2.6" />
+              </svg>
+            </div>
+            <div class="label">Calibrator</div>
+            <div class="sub">logistic regression</div>
+          </div>
+          <div class="edge" data-edge="calibrator-decision"><div class="token"></div></div>
+
+          <div class="pnode" data-node="decision">
+            <div class="icon-row">
+              <svg class="icon" viewBox="0 0 24 24" width="26" height="26" style="fill:var(--decision)"><path d="M12 2 2 12l10 10 10-10Zm0 3.83L18.17 12 12 18.17 5.83 12Z"/></svg>
+            </div>
+            <div class="label">Decision</div>
+            <div class="sub">error budget</div>
+          </div>
+        </div>
+
+        <div class="fanout">
+          <svg viewBox="0 0 100 40" preserveAspectRatio="none">
+            <path class="fedge" data-fedge="capable" d="M50,0 L14,40" />
+            <path class="fedge" data-fedge="mid" d="M50,0 L50,40" />
+            <path class="fedge" data-fedge="cheap" d="M50,0 L86,40" />
+          </svg>
+        </div>
+
+        <div class="tier-row">
+          <div class="pnode tier" data-tier="capable">
+            <div class="icon-row"><svg class="icon" viewBox="0 0 24 24" width="15" height="15" style="fill:var(--anthropic)"><path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/></svg></div>
+            <div class="label">capable</div>
+            <div class="sub">Claude Sonnet 5</div>
+          </div>
+          <div class="pnode tier" data-tier="mid">
+            <div class="icon-row"><svg class="icon" viewBox="0 0 24 24" width="15" height="15" style="fill:var(--gemini)"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></svg></div>
+            <div class="label">mid</div>
+            <div class="sub">Gemini 3.1 Flash Lite</div>
+          </div>
+          <div class="pnode tier" data-tier="cheap">
+            <div class="icon-row"><svg class="icon" viewBox="0 0 24 24" width="15" height="15" style="fill:var(--openai)"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg></div>
+            <div class="label">cheap</div>
+            <div class="sub">GPT 5.4 nano</div>
+          </div>
+        </div>
+
+        <div class="infra-strip">
+          <span><svg viewBox="0 0 24 24"><path d="M23.5594 14.7228a.5269.5269 0 0 0-.0563-.1191c-.139-.2632-.4768-.3418-1.0074-.2321-1.6533.3411-2.2935.1312-2.5256-.0191 1.342-2.0482 2.445-4.522 3.0411-6.8297.2714-1.0507.7982-3.5237.1222-4.7316a1.5641 1.5641 0 0 0-.1509-.235C21.6931.9086 19.8007.0248 17.5099.0005c-1.4947-.0158-2.7705.3461-3.1161.4794a9.449 9.449 0 0 0-.5159-.0816 8.044 8.044 0 0 0-1.3114-.1278c-1.1822-.0184-2.2038.2642-3.0498.8406-.8573-.3211-4.7888-1.645-7.2219.0788C.9359 2.1526.3086 3.8733.4302 6.3043c.0409.818.5069 3.334 1.2423 5.7436.4598 1.5065.9387 2.7019 1.4334 3.582.553.9942 1.1259 1.5933 1.7143 1.7895.4474.1491 1.1327.1441 1.8581-.7279.8012-.9635 1.5903-1.8258 1.9446-2.2069.4351.2355.9064.3625 1.39.3772a.0569.0569 0 0 0 .0004.0041 11.0312 11.0312 0 0 0-.2472.3054c-.3389.4302-.4094.5197-1.5002.7443-.3102.064-1.1344.2339-1.1464.8115-.0025.1224.0329.2309.0919.3268.2269.4231.9216.6097 1.015.6331 1.3345.3335 2.5044.092 3.3714-.6787-.017 2.231.0775 4.4174.3454 5.0874.2212.5529.7618 1.9045 2.4692 1.9043.2505 0 .5263-.0291.8296-.0941 1.7819-.3821 2.5557-1.1696 2.855-2.9059.1503-.8707.4016-2.8753.5388-4.1012.0169-.0703.0357-.1207.057-.1362.0007-.0005.0697-.0471.4272.0307a.3673.3673 0 0 0 .0443.0068l.2539.0223.0149.001c.8468.0384 1.9114-.1426 2.5312-.4308.6438-.2988 1.8057-1.0323 1.5951-1.6698z"/></svg>Postgres (Neon)<span class="dep-dot" id="dep-db" title="checking..."></span></span>
+          <span><svg viewBox="0 0 24 24"><path d="M22.71 13.145c-1.66 2.092-3.452 4.483-7.038 4.483-3.203 0-4.397-2.825-4.48-5.12.701 1.484 2.073 2.685 4.214 2.63 4.117-.133 6.94-3.852 6.94-7.239 0-4.05-3.022-6.972-8.268-6.972-3.752 0-8.4 1.428-11.455 3.685C2.59 6.937 3.885 9.958 4.35 9.626c2.648-1.904 4.748-3.13 6.784-3.744C8.12 9.244.886 17.05 0 18.425c.1 1.261 1.66 4.648 2.424 4.648.232 0 .431-.133.664-.365a100.49 100.49 0 0 0 5.54-6.765c.222 3.104 1.748 6.898 6.014 6.898 3.819 0 7.604-2.756 9.33-8.965.2-.764-.73-1.361-1.261-.73zm-4.349-5.013c0 1.959-1.926 2.922-3.685 2.922-.941 0-1.664-.247-2.235-.568 1.051-1.592 2.092-3.225 3.21-4.973 1.972.334 2.71 1.43 2.71 2.619z"/></svg>Redis (Upstash)<span class="dep-dot" id="dep-redis" title="checking..."></span></span>
+          <span><svg viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.372 0 12c0 6.627 5.373 12 12 12s12-5.373 12-12c0-6.628-5.373-12-12-12zm0 22.46c-1.885 0-3.414-1.26-3.414-2.814h6.828c0 1.553-1.528 2.813-3.414 2.813zm5.64-3.745H6.36v-2.046h11.28v2.046zm-.04-3.098H6.391c-.037-.043-.075-.086-.111-.13-1.155-1.401-1.427-2.133-1.69-2.879-.005-.025 1.4.287 2.395.511 0 0 .513.119 1.262.255-.72-.843-1.147-1.915-1.147-3.01 0-2.406 1.845-4.508 1.18-6.207.648.053 1.34 1.367 1.387 3.422.689-.951.977-2.69.977-3.755 0-1.103.727-2.385 1.454-2.429-.648 1.069.168 1.984.894 4.256.272.854.237 2.29.447 3.201.07-1.892.395-4.652 1.595-5.605-.529 1.2.079 2.702.494 3.424.671 1.164 1.078 2.047 1.078 3.716a4.642 4.642 0 01-1.11 2.996c.792-.149 1.34-.283 1.34-.283l2.573-.502s-.374 1.538-1.81 3.019z"/></svg>Prometheus<span class="live-metric" id="prom-live"></span></span>
+        </div>
+
+        <div class="results-strip">
+          <div class="rs-item"><span class="rs-label">Accuracy</span><span class="rs-value">96.0% <span class="rs-vs">vs 92.0%</span></span></div>
+          <div class="rs-item"><span class="rs-label">Cost (50 prompts)</span><span class="rs-value">$0.00569 <span class="rs-vs">vs $0.09387</span></span></div>
+          <div class="rs-item rs-highlight"><span class="rs-label">vs. always-capable</span><span class="rs-value">93.9% cheaper, no quality loss</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: try it live -->
+    <div class="col col-right glass">
+      <h2>Try it live</h2>
+      <div id="chat-log" class="chat-log">
+        <div class="chat-empty" id="chat-empty">
+          <p class="chat-empty-hint">Send a prompt to see the calibrator route it live.</p>
+          <div class="chat-suggestions">
+            <button class="chip" onclick="useSuggestion('easy')">What is 15% of 240?</button>
+            <button class="chip" onclick="useSuggestion('hard')">Prove &radic;2 is irrational by contradiction</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <div class="composer-pill">
+          <textarea id="prompt-input" placeholder="Message the router..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();runRoute();}"></textarea>
+          <button id="submit-btn" class="send-btn" onclick="runRoute()" aria-label="Send">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="counter-panel" id="counter-panel">
+        <h2>Cost savings meter</h2>
+        <div class="counter-grid">
+          <div class="counter-card"><span class="counter-label">Actually spent</span><span class="counter-value actual" id="c-actual">$0.000000</span></div>
+          <div class="counter-card"><span class="counter-label">Would have spent</span><span class="counter-value hypothetical" id="c-hypothetical">$0.000000</span></div>
+          <div class="counter-card"><span class="counter-label">Saved</span><span class="counter-value counter-saved" id="c-saved">$0.000000 (0.0%)</span></div>
+        </div>
+        <p class="counter-note">Live total from your requests above, vs. every prompt going straight to the capable tier (Claude Sonnet 5) at the real measured average rate ($0.0018774/prompt); not a live re-query.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="below-fold">
   <section>
     <h2>The math</h2>
     <div class="panel">
-      <p style="color:var(--muted); margin-top:0;">The calibrator (<code>app/router/calibrator.py</code>) is a logistic regression over four features — not an LLM call:</p>
+      <p style="margin-top:0;">The calibrator (<code>app/router/calibrator.py</code>) is a logistic regression over four features, not an LLM call. The cascade-on-confidence architecture follows FrugalGPT<a class="cite" href="#ref-1" title="Chen, Zaharia &amp; Zou, 2023">[1]</a>; the self-consistency feature follows Wang et al.<a class="cite" href="#ref-2" title="Wang et al., 2022">[2]</a>:</p>
       <div class="eq" id="eq-logreg"></div>
-      <p style="color:var(--muted);">The router accepts the cheap tier's answer only if its predicted error rate stays under a configured budget &epsilon; (<code>app/router/decision.py</code>):</p>
+      <p class="footnote" style="margin:0 0 16px;">Chosen over gradient-boosted trees (<code>scripts/train_calibrator.py</code>) for this dataset size (about 100 rows): fewer parameters to overfit, and it stays monotonic in each feature, matching the actual assumption that higher uncertainty means higher predicted error, instead of letting a tree carve out noise-driven splits on a small sample.</p>
+      <p>The router accepts the cheap tier's answer only if its predicted error rate stays under a configured budget &epsilon; (<code>app/router/decision.py</code>), treating that threshold as a hyperparameter tuned on held-out data rather than a hand-picked value, following the C3PO-style deferral rules of Kang et al.<a class="cite" href="#ref-3" title="Kang et al., C3PO-style deferral rules">[3]</a> and the decision-theoretic cascade literature<a class="cite" href="#ref-4" title="Decision-theoretic cascade literature">[4]</a>:</p>
       <div class="eq" id="eq-decision"></div>
-      <p style="color:var(--muted);">Calibration quality is checked with Expected Calibration Error (<code>scripts/stats_utils.py</code>) — does the model's confidence match its actual accuracy?</p>
+      <p>Calibration quality is checked with Expected Calibration Error, following Guo et al.<a class="cite" href="#ref-5" title="Guo et al., 2017">[5]</a> (<code>scripts/stats_utils.py</code>): does the model's confidence match its actual accuracy?</p>
       <div class="eq" id="eq-ece"></div>
     </div>
   </section>
 
   <section>
     <h2>Code, not vibes</h2>
-    <pre><code>def decide_tier(p_correct_cheap, error_budget, p_correct_mid=None):
+    <div class="terminal-window">
+      <div class="terminal-chrome">
+        <span class="terminal-dot red"></span>
+        <span class="terminal-dot yellow"></span>
+        <span class="terminal-dot green"></span>
+        <span class="terminal-title">app/router/decision.py</span>
+      </div>
+      <pre><code id="decision-code" class="language-python">def decide_tier(p_correct_cheap, error_budget, p_correct_mid=None):
     predicted_error_cheap = 1.0 - p_correct_cheap
     if predicted_error_cheap &lt;= error_budget + 1e-9:
         return RoutingDecision(chosen_tier="cheap", ...)
     # escalate one rung, re-check against the same budget
-    ...</code></pre>
+    ...</code><span class="term-cursor"></span></pre>
+    </div>
   </section>
 
   <section>
     <h2>Real results</h2>
     <div class="panel">
-      <p style="color:var(--muted); margin-top:0;">Held-out evaluation, 50 prompts never seen during calibrator training. Baseline (<code>always_capable</code>, every prompt sent to Claude Sonnet 5 directly): 92.0% accuracy, $0.09387 total cost.</p>
+      <p style="margin-top:0;">Held-out evaluation, 50 prompts never seen during calibrator training. Baseline (<code>always_capable</code>, every prompt sent to Claude Sonnet 5 directly): 92.0% accuracy, $0.09387 total cost.</p>
       <div class="stat-grid">
-        <div class="stat"><div class="stat-label">Production default (&epsilon;=0.15)</div><div class="stat-value">96.0% accuracy</div></div>
-        <div class="stat"><div class="stat-label">Cost</div><div class="stat-value">$0.00569</div></div>
-        <div class="stat"><div class="stat-label">vs. always-capable</div><div class="stat-value" style="color:var(--good)">+4.0pp acc, -93.9% cost</div></div>
+        <div class="stat"><div class="stat-label">Production default (&epsilon;=0.15)</div><div class="stat-value" style="color:var(--good)">96.0% accuracy</div></div>
+        <div class="stat"><div class="stat-label">Cost</div><div class="stat-value" style="color:var(--good)">$0.00569</div></div>
+        <div class="stat"><div class="stat-label">vs. always-capable</div><div class="stat-value" style="color:var(--good)">93.9% cheaper, no measurable quality loss</div></div>
       </div>
-      <p style="color:var(--muted); margin-bottom:0;">Verified across a full error-budget sweep (&epsilon;=0.05 to 0.50), not one cherry-picked value &mdash; &epsilon;=0.10 through 0.20 all beat the baseline on both accuracy and cost simultaneously. Full sweep in <code>results/budget_sweep.md</code>, ablation and Pareto frontier in <code>results/eval_report.md</code>. n=50 &mdash; confidence intervals are real and non-trivial (e.g. accuracy CI at &epsilon;=0.15 spans 86.5%-98.9%); treat this as a strong validated signal, not a settled number pending a larger eval set.</p>
+      <p style="margin-bottom:0;">96.0% vs 92.0% accuracy: the confidence intervals overlap (86.5-98.9% vs 83.8-97.9%), so this is parity, not a claimed accuracy gain. Verified across a full error-budget sweep (&epsilon;=0.05 to 0.50), not one cherry-picked value; &epsilon;=0.10 through 0.20 all beat the baseline on cost with no accuracy loss. Full sweep in <code>results/budget_sweep.md</code>, ablation and Pareto frontier in <code>results/eval_report.md</code>. n=50, a real, non-trivial CI width; treat this as a strong validated signal, not a fully settled number.</p>
     </div>
   </section>
 
   <section>
     <h2>Honest limitations</h2>
     <div class="panel">
-      <p style="color:var(--muted); margin-top:0;">Correctness labels come from GSM8K and MMLU, established peer-reviewed benchmarks pulled live from their canonical HuggingFace releases &mdash; not invented for this project. But both datasets have a documented, non-zero label-error rate in the research literature, and our own correctness check (a substring match against ground truth, not a real answer parser) adds further noise in both directions. The calibrator's training labels carry some irreducible baseline error &mdash; this isn't unique to this project, every benchmark-trained system inherits it, but it's stated here rather than left implicit.</p>
-      <p style="color:var(--muted); margin-bottom:0;">The cheap tier also changed mid-build: originally Groq's <code>openai/gpt-oss-120b</code>, which didn't support logprobs and hit an 8000-tokens/minute free-tier rate limit during bulk data collection. Switched to OpenAI's <code>gpt-5.4-nano</code>, which supports real logprobs and has far higher rate limits at this account's tier &mdash; a real pivot during the build, not the original plan.</p>
+      <p style="margin-top:0;">Correctness labels come from GSM8K<a class="cite" href="#ref-6" title="Cobbe et al., 2021">[6]</a> and MMLU<a class="cite" href="#ref-7" title="Hendrycks et al., 2021">[7]</a>, established peer-reviewed benchmarks pulled live from their canonical HuggingFace releases, not invented for this project. But both datasets have a documented, non-zero label-error rate in the research literature, and our own correctness check (a substring match against ground truth, not a real answer parser) adds further noise in both directions. The calibrator's training labels carry some irreducible baseline error; this isn't unique to this project, every benchmark-trained system inherits it, but it's stated here rather than left implicit.</p>
+      <p style="margin-bottom:0;">The cheap tier also changed mid-build: originally Groq's <code>openai/gpt-oss-120b</code>, which didn't support logprobs and hit an 8000-tokens/minute free-tier rate limit during bulk data collection. Switched to OpenAI's <code>gpt-5.4-nano</code>, which supports real logprobs and has far higher rate limits at this account's tier: a real pivot during the build, not the original plan.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>References</h2>
+    <div class="panel">
+      <ol class="bibliography">
+        <li id="ref-1">Chen, L., Zaharia, M., &amp; Zou, J. (2023). FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance. Stanford University. <a href="https://arxiv.org/abs/2305.05176" target="_blank">arXiv:2305.05176</a>.</li>
+        <li id="ref-2">Wang, X., et al. (2022). Self-Consistency Improves Chain of Thought Reasoning in Language Models. <a href="https://arxiv.org/abs/2203.11171" target="_blank">arXiv:2203.11171</a>.</li>
+        <li id="ref-3">Kang, et al. C3PO-style deferral rules for cascade routing. <a href="https://arxiv.org/html/2604.14251" target="_blank">arXiv:2604.14251</a>.</li>
+        <li id="ref-4">Decision-theoretic cascade literature. <a href="https://arxiv.org/html/2605.06350" target="_blank">arXiv:2605.06350</a>.</li>
+        <li id="ref-5">Guo, C., Pleiss, G., Sun, Y., &amp; Weinberger, K. Q. (2017). On Calibration of Modern Neural Networks. <a href="https://arxiv.org/abs/1706.04599" target="_blank">arXiv:1706.04599</a>.</li>
+        <li id="ref-6">Cobbe, K., et al. (2021). Training Verifiers to Solve Math Word Problems (GSM8K). <a href="https://arxiv.org/abs/2110.14168" target="_blank">arXiv:2110.14168</a>.</li>
+        <li id="ref-7">Hendrycks, D., et al. (2021). Measuring Massive Multitask Language Understanding (MMLU). <a href="https://arxiv.org/abs/2009.03300" target="_blank">arXiv:2009.03300</a>.</li>
+        <li id="ref-8">LMSYS RouteLLM. <a href="https://github.com/lm-sys/RouteLLM" target="_blank">github.com/lm-sys/RouteLLM</a>.</li>
+        <li id="ref-9">RouterBench. <a href="https://arxiv.org/abs/2403.12031" target="_blank">arXiv:2403.12031</a>.</li>
+      </ol>
     </div>
   </section>
 
   <footer>
-    Reproduction and extension of known industry routing patterns (RouteLLM, RouterBench) — not a claim of novel research.
+    <span>Reproduction and extension of known industry routing patterns (RouteLLM<a class="cite" href="#ref-8" title="LMSYS RouteLLM">[8]</a>, RouterBench<a class="cite" href="#ref-9" title="RouterBench">[9]</a>, FrugalGPT<a class="cite" href="#ref-1" title="Chen, Zaharia &amp; Zou, 2023">[1]</a>), not a claim of novel research.</span>
     <a href="https://github.com/Hariprashad-Ravikumar/Cost-Aware-Multi-Agent-LLM-Router" target="_blank">View source on GitHub</a>
   </footer>
 </div>
 
 <script>
-mermaid.initialize({ startOnLoad: true, theme: "dark" });
-
 katex.render("P(\\text{correct}) = \\sigma(w \\cdot x + b), \\quad x = [\\text{logprob\\_unc},\\ \\text{self\\_consistency}, \\text{hard\\_cluster\\_dist}, \\text{resp\\_len}]",
   document.getElementById("eq-logreg"), { displayMode: true });
 katex.render("\\text{use cheap tier if } (1 - P(\\text{correct})) \\le \\epsilon, \\text{ else escalate}",
   document.getElementById("eq-decision"), { displayMode: true });
 katex.render("\\text{ECE} = \\sum_{m=1}^{M} \\frac{|B_m|}{n} \\left| \\text{acc}(B_m) - \\text{conf}(B_m) \\right|",
   document.getElementById("eq-ece"), { displayMode: true });
+
+if (window.hljs) hljs.highlightElement(document.getElementById("decision-code"));
 
 // Real measured average cost of always using the capable tier (Claude Sonnet 5),
 // from results/eval_report.md's always_capable row ($0.09387 / 50 prompts). Used only
@@ -237,23 +758,227 @@ const examples = {
   easy: "What is 15% of 240?",
   hard: "Prove that the square root of 2 is irrational using a formal proof by contradiction, showing every logical step."
 };
-function fillExample(kind) {
+
+// tier -> real provider identity, matching app/main.py's TIER_PROVIDER mapping
+// (cheap=OpenAI, mid=Gemini, capable=Anthropic) - /route's JSON doesn't carry a
+// provider field directly, so this is a fixed config-level lookup, not a guess
+// about any specific response.
+const TIER_PROVIDER_INFO = {
+  cheap: {
+    name: "GPT 5.4 nano", color: "var(--openai)",
+    path: "M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"
+  },
+  mid: {
+    name: "Gemini 3.1 Flash Lite", color: "var(--gemini)",
+    path: "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"
+  },
+  capable: {
+    name: "Claude Sonnet 5", color: "var(--anthropic)",
+    path: "M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"
+  }
+};
+function useSuggestion(kind) {
   document.getElementById("prompt-input").value = examples[kind];
+  runRoute();
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// CommonMark treats "\(" "\)" "\[" "\]" as backslash-escapes for literal punctuation,
+// so marked.parse() silently strips those backslashes before KaTeX ever sees the
+// text - corrupting the exact delimiters KaTeX looks for and leaving math unrendered.
+// Swap complete LaTeX spans out for plain-text placeholders (untouched by markdown
+// escaping) before parsing, then swap the real LaTeX back into the resulting HTML.
+function protectMath(text) {
+  const store = [];
+  const protectedText = text.replace(/\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$/g, match => {
+    store.push(match);
+    return `@@MATH${store.length - 1}@@`;
+  });
+  return { protectedText, store };
+}
+function restoreMath(html, store) {
+  return html.replace(/@@MATH(\d+)@@/g, (_, i) => store[Number(i)]);
+}
+
+// Real markdown (marked) + syntax-highlighted code blocks (highlight.js), sanitized
+// (DOMPurify) before insertion since this is LLM-generated text, not trusted markup.
+function renderMarkdownOnly(el, text) {
+  const { protectedText, store } = protectMath(text);
+  let html = marked.parse(protectedText, { breaks: true });
+  html = restoreMath(html, store);
+  el.innerHTML = window.DOMPurify ? DOMPurify.sanitize(html) : html;
+  el.querySelectorAll("pre code").forEach(block => hljs.highlightElement(block));
+}
+
+// Full render pass: markdown+code (above) plus KaTeX. Math is only ever rendered
+// here, once the complete text is available - an incomplete \( ... \) mid-stream
+// can flash a parse error, so live ticks (renderMarkdownOnly) skip it entirely.
+function renderAnswer(el, text) {
+  renderMarkdownOnly(el, text);
+  if (window.renderMathInElement) {
+    renderMathInElement(el, {
+      delimiters: [
+        { left: "\\[", right: "\\]", display: true },
+        { left: "\\(", right: "\\)", display: false },
+        { left: "$$", right: "$$", display: true }
+      ],
+      throwOnError: false
+    });
+  }
+}
+
+// ---------- chat turns ----------
+function scrollChatToBottom() {
+  const log = document.getElementById("chat-log");
+  log.scrollTop = log.scrollHeight;
+}
+
+function appendUserTurn(prompt) {
+  const empty = document.getElementById("chat-empty");
+  if (empty) empty.remove(); // Claude-style: suggestions only exist before the first message
+  const log = document.getElementById("chat-log");
+  const turn = document.createElement("div");
+  turn.className = "chat-turn user";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble-user";
+  bubble.textContent = prompt;
+  turn.appendChild(bubble);
+  log.appendChild(turn);
+  scrollChatToBottom();
+}
+
+function appendAssistantPlaceholder() {
+  const log = document.getElementById("chat-log");
+  const turn = document.createElement("div");
+  turn.className = "chat-turn";
+  turn.innerHTML =
+    '<div class="turn-assistant"><div class="assistant-status">' +
+    '<span class="dot-pulse"></span>routing to the cheapest tier likely to get it right&hellip;</div></div>';
+  log.appendChild(turn);
+  scrollChatToBottom();
+  return turn.querySelector(".turn-assistant");
+}
+
+// Reveals real, already-received text progressively (typewriter effect) for the
+// "watching it type" feel modern chat UIs use - the content is 100% real, only the
+// display pacing is animated. Renders as plain text while typing (KaTeX can't safely
+// render a half-open \( ... \) block), then runs the real markdown+KaTeX pass
+// (renderAnswer) once the full text is in.
+function typewriterReveal(el, text) {
+  return new Promise(resolve => {
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      renderAnswer(el, text);
+      resolve();
+      return;
+    }
+    const chars = Array.from(text);
+    // Adaptive pacing so a long answer still finishes typing quickly (capped at
+    // ~1.8s) instead of the reveal taking as long as the text is long. Driven by
+    // real elapsed time (not a fixed per-frame step count) so a throttled/backgrounded
+    // tab still catches up to the right amount of text instead of falling behind.
+    const targetMs = Math.min(1800, Math.max(350, chars.length * 4));
+    const start = performance.now();
+    el.classList.add("typing");
+    function frame(now) {
+      const elapsed = now - start;
+      const shown = Math.min(chars.length, Math.ceil((elapsed / targetMs) * chars.length));
+      renderMarkdownOnly(el, chars.slice(0, shown).join(""));
+      if (shown < chars.length) {
+        requestAnimationFrame(frame);
+      } else {
+        el.classList.remove("typing");
+        renderAnswer(el, text);
+        resolve();
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+async function resolveAssistantTurn(el, data) {
+  let pcorrectHtml;
+  if (data.predicted_p_correct === null) {
+    // No dedicated calibrator scored this tier - show the router's own real decision
+    // reason instead of a bare "n/a", so this is honest about what wasn't measured
+    // rather than pretending nothing happened.
+    pcorrectHtml = `<span class="meta-chip" title="${escapeHtml(data.reason)}">P(correct): <strong>n/a</strong></span>`;
+  } else {
+    pcorrectHtml = `<span class="meta-chip">P(correct): <strong>${data.predicted_p_correct.toFixed(3)}</strong></span>`;
+  }
+  const provider = TIER_PROVIDER_INFO[data.chosen_tier];
+  const badgeHtml = provider
+    ? `<div class="model-badge"><svg viewBox="0 0 24 24" width="14" height="14" style="fill:${provider.color}"><path d="${provider.path}"/></svg>` +
+      `<strong>${escapeHtml(provider.name)}</strong> &middot; selected by Cost-Aware LLM Router</div>`
+    : "";
+
+  el.innerHTML =
+    badgeHtml +
+    '<div class="assistant-answer"></div>' +
+    '<div class="assistant-meta">' +
+    `<span class="meta-chip">tier: <strong>${data.chosen_tier}</strong></span>` +
+    pcorrectHtml +
+    `<span class="meta-chip">cost: <strong>$${data.cost_usd.toFixed(5)}</strong></span>` +
+    `<span class="meta-chip">latency: <strong>${data.latency_ms} ms</strong></span>` +
+    "</div>";
+  scrollChatToBottom();
+  await typewriterReveal(el.querySelector(".assistant-answer"), data.answer);
+  scrollChatToBottom();
+}
+
+function resolveAssistantTurnError(el, message) {
+  el.parentElement.classList.add("turn-error");
+  el.innerHTML = `<div class="assistant-answer">Request failed: ${escapeHtml(message)}</div>`;
+  scrollChatToBottom();
+}
+
+// ---------- architecture diagram: driven by the real fetch() lifecycle below,
+// never by a decorative timer. The idle shimmer on edges (CSS-only, always on)
+// is the only "ambient" motion, and it never touches node state or the tier
+// highlight - that stays exclusively real-request-driven.
+function setDiagramProcessing(active) {
+  document.querySelectorAll('#diagram .pnode, #diagram .edge').forEach(el => el.classList.toggle('processing', active));
+}
+
+function resetDiagramResult() {
+  document.querySelectorAll('#diagram .pnode.tier').forEach(el => el.classList.remove('won'));
+  document.querySelectorAll('#diagram .fedge').forEach(el => el.classList.remove('won'));
+  document.querySelector('.sigmoid-marker').classList.remove('show');
+  document.querySelector('.pnode[data-node="calibrator"]').classList.remove('settled');
+}
+
+function settleDiagram(tier, pCorrect) {
+  setDiagramProcessing(false);
+  if (typeof pCorrect === "number") {
+    const marker = document.querySelector('.sigmoid-marker');
+    const x = 4 + pCorrect * 52;
+    const y = 27 - pCorrect * 24;
+    marker.setAttribute('cx', x.toFixed(1));
+    marker.setAttribute('cy', y.toFixed(1));
+    marker.classList.add('show');
+    document.querySelector('.pnode[data-node="calibrator"]').classList.add('settled');
+  }
+  const tierNode = document.querySelector(`.pnode.tier[data-tier="${tier}"]`);
+  const fedge = document.querySelector(`.fedge[data-fedge="${tier}"]`);
+  if (tierNode) tierNode.classList.add('won');
+  if (fedge) fedge.classList.add('won');
 }
 
 async function runRoute() {
   const btn = document.getElementById("submit-btn");
-  const status = document.getElementById("status");
-  const errorBox = document.getElementById("error-box");
-  const result = document.getElementById("result");
-  const prompt = document.getElementById("prompt-input").value.trim();
+  const input = document.getElementById("prompt-input");
+  const prompt = input.value.trim();
   if (!prompt) return;
 
   btn.disabled = true;
-  status.textContent = "routing...";
-  errorBox.textContent = "";
-  result.style.display = "none";
-  clearHighlight();
+  input.value = "";
+  appendUserTurn(prompt);
+  const assistantEl = appendAssistantPlaceholder();
+  resetDiagramResult();
+  setDiagramProcessing(true); // genuine in-flight state, driven by this fetch's real lifecycle
 
   try {
     const res = await fetch("/route", {
@@ -267,21 +992,14 @@ async function runRoute() {
     }
     const data = await res.json();
 
-    document.getElementById("r-tier").textContent = data.chosen_tier;
-    document.getElementById("r-pcorrect").textContent =
-      data.predicted_p_correct === null ? "n/a (uncalibrated tier)" : data.predicted_p_correct.toFixed(3);
-    document.getElementById("r-cost").textContent = "$" + data.cost_usd.toFixed(5);
-    document.getElementById("r-latency").textContent = data.latency_ms + " ms";
-    document.getElementById("r-answer").textContent = data.answer;
-    result.style.display = "block";
-    highlightTier(data.chosen_tier);
-    status.textContent = data.cache_hit ? "served from cache" : "";
+    resolveAssistantTurn(assistantEl, data);
+    settleDiagram(data.chosen_tier, data.predicted_p_correct);
     updateCounters(data);
   } catch (e) {
-    errorBox.textContent = "Request failed: " + e.message;
+    setDiagramProcessing(false);
+    resolveAssistantTurnError(assistantEl, e.message);
   } finally {
     btn.disabled = false;
-    if (!errorBox.textContent) status.textContent = status.textContent || "";
   }
 }
 
@@ -301,25 +1019,59 @@ function updateCounters(data) {
   document.getElementById("c-actual").textContent = "$" + sessionActualCost.toFixed(6);
   document.getElementById("c-hypothetical").textContent = "$" + hypothetical.toFixed(6);
   document.getElementById("c-saved").textContent = "$" + saved.toFixed(6) + " (" + savedPct.toFixed(1) + "%)";
-  document.getElementById("counter-panel").hidden = false;
 }
 
-function clearHighlight() {
-  document.querySelectorAll(".mermaid svg .node").forEach(n => n.style.filter = "");
+// ---------- real dependency health + live Prometheus counters, both fed by genuine
+// backend endpoints (never mocked) - see /health/detail and /metrics in app/main.py.
+function setDepDot(id, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("ok", ok === true);
+  el.classList.toggle("bad", ok === false);
+  el.title = ok === true ? "reachable" : ok === false ? "unreachable" : "unknown";
 }
 
-function highlightTier(tier) {
-  // Mermaid renders node labels into elements with an id derived from the node's
-  // text; simplest robust approach here is matching on visible text content.
-  const label = { cheap: "cheap", mid: "mid", capable: "capable" }[tier];
-  if (!label) return;
-  document.querySelectorAll(".mermaid svg .node").forEach(node => {
-    const text = node.textContent.trim().toLowerCase();
-    if (text === label) {
-      node.style.filter = "drop-shadow(0 0 8px #34d399)";
+async function refreshHealth() {
+  try {
+    const res = await fetch("/health/detail");
+    const data = await res.json();
+    setDepDot("dep-db", data.db === "ok");
+    setDepDot("dep-redis", data.redis === "ok");
+    setDepDot("breaker-openai", data.providers.openai === "closed");
+    setDepDot("breaker-gemini", data.providers.gemini === "closed");
+    setDepDot("breaker-anthropic", data.providers.anthropic === "closed");
+  } catch (e) {
+    // Health panel is best-effort - a failed health check just means "unknown",
+    // it shouldn't break the rest of the page.
+  }
+}
+
+// Prometheus text exposition format is line-based: "metric_name{labels} value".
+// Small regex parser for just the handful of series this page cares about -
+// avoids pulling in a client-side Prometheus parsing library for 3 numbers.
+function parsePromMetric(text, name) {
+  const m = text.match(new RegExp("^" + name + "(?:\\{[^}]*\\})?\\s+([\\d.eE+-]+)", "m"));
+  return m ? parseFloat(m[1]) : null;
+}
+
+async function refreshMetrics() {
+  try {
+    const res = await fetch("/metrics");
+    const text = await res.text();
+    const requests = parsePromMetric(text, "router_requests_total");
+    const cost = parsePromMetric(text, "router_cost_usd_total");
+    const live = document.getElementById("prom-live");
+    if (live && requests !== null && cost !== null) {
+      live.textContent = requests.toFixed(0) + " req · $" + cost.toFixed(4);
     }
-  });
+  } catch (e) {
+    // best-effort, same as refreshHealth
+  }
 }
+
+refreshHealth();
+refreshMetrics();
+setInterval(refreshMetrics, 10000);
 </script>
 </body>
 </html>

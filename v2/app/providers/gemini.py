@@ -9,10 +9,12 @@ _breaker = make_breaker("gemini")
 
 
 @with_retry
-async def _raw_complete(prompt: str, model: str) -> ProviderResponse:
+async def _raw_complete(prompt: str, model: str, system_prompt: str | None = None) -> ProviderResponse:
     api_key = os.environ["GEMINI_API_KEY"]
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     body = {"contents": [{"parts": [{"text": prompt}]}]}
+    if system_prompt:
+        body["systemInstruction"] = {"parts": [{"text": system_prompt}]}
 
     start = time.monotonic()
     async with httpx.AsyncClient(timeout=60) as client:
@@ -34,5 +36,5 @@ async def _raw_complete(prompt: str, model: str) -> ProviderResponse:
     )
 
 
-async def complete(prompt: str, model: str) -> ProviderResponse:
-    return await call_with_protection("gemini", _breaker, _raw_complete, prompt, model)
+async def complete(prompt: str, model: str, system_prompt: str | None = None) -> ProviderResponse:
+    return await call_with_protection("gemini", _breaker, _raw_complete, prompt, model, system_prompt)

@@ -11,13 +11,17 @@ _breaker = make_breaker("anthropic")
 
 
 @with_retry
-async def _raw_complete(prompt: str, model: str, max_tokens: int = 4096) -> ProviderResponse:
+async def _raw_complete(
+    prompt: str, model: str, max_tokens: int = 4096, system_prompt: str | None = None
+) -> ProviderResponse:
     api_key = os.environ["ANTHROPIC_API_KEY"]
     body = {
         "model": model,
         "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": prompt}],
     }
+    if system_prompt:
+        body["system"] = system_prompt
 
     start = time.monotonic()
     async with httpx.AsyncClient(timeout=60) as client:
@@ -47,5 +51,5 @@ async def _raw_complete(prompt: str, model: str, max_tokens: int = 4096) -> Prov
     )
 
 
-async def complete(prompt: str, model: str) -> ProviderResponse:
-    return await call_with_protection("anthropic", _breaker, _raw_complete, prompt, model)
+async def complete(prompt: str, model: str, system_prompt: str | None = None) -> ProviderResponse:
+    return await call_with_protection("anthropic", _breaker, _raw_complete, prompt, model, 4096, system_prompt)

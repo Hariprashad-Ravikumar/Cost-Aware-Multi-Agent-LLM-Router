@@ -21,6 +21,8 @@ from pydantic import BaseModel
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response, HTMLResponse
 
+from sqlalchemy import text as sql_text
+
 from app import cache, db
 from app.providers import gemini, openai as openai_provider, anthropic as anthropic_provider
 from app.providers.base import ProviderError
@@ -44,6 +46,21 @@ MID_MODEL = os.environ.get("MID_MODEL", "gemini-3.1-flash-lite")
 CAPABLE_MODEL = os.environ.get("CAPABLE_MODEL", "claude-sonnet-5")
 ERROR_BUDGET = float(os.environ.get("ERROR_BUDGET", "0.05"))
 CACHE_TTL = int(os.environ.get("CACHE_TTL_SECONDS", "3600"))
+
+# Applied only to escalation-tier calls (mid/capable), never the cheap-tier draft
+# call - response_length_chars is one of the calibrator's four trained features
+# (app/router/features.py), computed from that exact draft response, and
+# scripts/collect_calibration_data.py collected training data with no system
+# prompt. Biasing the draft call's length would skew a trained feature away from
+# what the calibrator actually learned from; escalation answers don't feed that
+# feature, so they're safe to shorten.
+CONCISE_SYSTEM_PROMPT = (
+    "Default to a concise answer: give the direct answer first, then at most one "
+    "short line of explanation or reasoning. Do not add extra caveats, "
+    "restatements, or elaboration beyond that. If the user's own message "
+    "explicitly asks for more detail, more steps, a full explanation, or "
+    "clarification, give the fuller answer they asked for instead."
+)
 
 TIER_PROVIDER = {
     "cheap": ("openai", CHEAP_MODEL),
@@ -72,6 +89,7 @@ class RouteResponse(BaseModel):
     chosen_tier: str
     model: str
     predicted_p_correct: float | None
+    reason: str
     answer: str
     input_tokens: int
     output_tokens: int
@@ -96,14 +114,14 @@ def _check_correct(answer: str, ground_truth: str | None) -> bool | None:
     return ground_truth.strip().lower() in answer.strip().lower()
 
 
-async def _call_tier(tier: str, prompt: str, logprobs: bool = False):
+async def _call_tier(tier: str, prompt: str, logprobs: bool = False, system_prompt: str | None = None):
     provider_name, model = TIER_PROVIDER[tier]
     if provider_name == "openai":
-        return await openai_provider.complete(prompt, model, logprobs=logprobs)
+        return await openai_provider.complete(prompt, model, logprobs=logprobs, system_prompt=system_prompt)
     if provider_name == "gemini":
-        return await gemini.complete(prompt, model)
+        return await gemini.complete(prompt, model, system_prompt=system_prompt)
     if provider_name == "anthropic":
-        return await anthropic_provider.complete(prompt, model)
+        return await anthropic_provider.complete(prompt, model, system_prompt=system_prompt)
     raise ValueError(f"Unknown provider for tier {tier}: {provider_name}")
 
 
@@ -117,6 +135,9 @@ async def route(req: RouteRequest):
         cached["cache_hit"] = True
         cached["correct"] = _check_correct(cached["answer"], req.ground_truth)
         cached["latency_ms"] = int((time.monotonic() - start) * 1000)  # actual cache-hit latency, not the stale cached value
+        # A cache entry written before the "reason" field was added won't have it -
+        # backfill honestly rather than 500ing on a schema change mid-TTL.
+        cached.setdefault("reason", "unknown - cached before routing reasons were tracked")
         latency_hist.observe(cached["latency_ms"] / 1000)
         return RouteResponse(id=req.id, **cached)
 
@@ -148,12 +169,12 @@ async def route(req: RouteRequest):
         model_used = CHEAP_MODEL
     else:
         try:
-            final = await _call_tier(decision.chosen_tier, req.prompt)
+            final = await _call_tier(decision.chosen_tier, req.prompt, system_prompt=CONCISE_SYSTEM_PROMPT)
         except ProviderError:
             # Escalation target down - fall back to the trusted top tier rather than
             # silently returning the (already-rejected) cheap answer.
             try:
-                final = await _call_tier("capable", req.prompt)
+                final = await _call_tier("capable", req.prompt, system_prompt=CONCISE_SYSTEM_PROMPT)
                 decision.chosen_tier = "capable"
             except ProviderError as e2:
                 raise HTTPException(status_code=502, detail=f"all escalation targets unavailable: {e2}")
@@ -170,6 +191,7 @@ async def route(req: RouteRequest):
         "chosen_tier": decision.chosen_tier,
         "model": model_used,
         "predicted_p_correct": decision.predicted_p_correct,
+        "reason": decision.reason,
         "answer": final.text,
         "input_tokens": final.input_tokens,
         "output_tokens": final.output_tokens,
@@ -222,6 +244,38 @@ async def index():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/health/detail")
+async def health_detail():
+    """Real dependency checks - not a static 'all green' claim. Each check is
+    isolated so one dependency being down still reports the others accurately
+    instead of throwing away the whole response.
+    """
+    try:
+        session = db.get_session()
+        try:
+            session.execute(sql_text("SELECT 1"))
+            db_status = "ok"
+        finally:
+            session.close()
+    except Exception as e:
+        db_status = f"error: {e}"
+
+    try:
+        redis_status = "ok" if await cache.ping() else "error: ping returned falsy"
+    except Exception as e:
+        redis_status = f"error: {e}"
+
+    return {
+        "db": db_status,
+        "redis": redis_status,
+        "providers": {
+            "openai": openai_provider._breaker.current_state,
+            "gemini": gemini._breaker.current_state,
+            "anthropic": anthropic_provider._breaker.current_state,
+        },
+    }
 
 
 @app.get("/metrics")

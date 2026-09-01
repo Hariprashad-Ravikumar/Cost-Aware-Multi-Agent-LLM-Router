@@ -15,6 +15,10 @@ def _get_client() -> redis.Redis:
     return _client
 
 
+async def ping() -> bool:
+    return await _get_client().ping()
+
+
 def _cache_key(prompt: str, model: str) -> str:
     normalized = " ".join(prompt.strip().lower().split())
     digest = hashlib.sha256(f"{model}:{normalized}".encode()).hexdigest()

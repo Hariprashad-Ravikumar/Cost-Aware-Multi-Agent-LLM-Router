@@ -10,11 +10,17 @@ _breaker = make_breaker("openai")
 
 
 @with_retry
-async def _raw_complete(prompt: str, model: str, logprobs: bool = False, temperature: float = 0) -> ProviderResponse:
+async def _raw_complete(
+    prompt: str, model: str, logprobs: bool = False, temperature: float = 0, system_prompt: str | None = None
+) -> ProviderResponse:
     api_key = os.environ["OPENAI_API_KEY"]
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
     body = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
     }
     if logprobs:
         body["logprobs"] = True
@@ -61,5 +67,9 @@ async def _raw_complete(prompt: str, model: str, logprobs: bool = False, tempera
     )
 
 
-async def complete(prompt: str, model: str, logprobs: bool = False, temperature: float = 0) -> ProviderResponse:
-    return await call_with_protection("openai", _breaker, _raw_complete, prompt, model, logprobs, temperature)
+async def complete(
+    prompt: str, model: str, logprobs: bool = False, temperature: float = 0, system_prompt: str | None = None
+) -> ProviderResponse:
+    return await call_with_protection(
+        "openai", _breaker, _raw_complete, prompt, model, logprobs, temperature, system_prompt
+    )
