@@ -1,108 +1,111 @@
-# RouteDemo: Cost-Aware Multi-Agent LLM Router
+# Calibrated Cost-Aware LLM Router
 
-RouteDemo is a portfolio-grade demonstration project that implements an n8n-orchestrated multi-agent pipeline. It routes prompts to either a fast/cheap LLM (Groq `openai/gpt-oss-120b`) or a capable LLM (Google `gemini-3.1-flash-lite`) based on a difficulty score from a separate lightweight classifier call. It produces real, computed, auditable metrics (cost, latency, accuracy) comparing the routed execution against an "always-use-the-capable-model" baseline, logged from actual API calls with no fabricated or estimated numbers.
+**Version:** v2.0, production FastAPI service with a calibrated router. Earlier prototype: see [v1/README.md](v1/README.md).
 
-## Prior Art & Honest Framing
+**Tags:** LLM routing, cost optimization, model calibration, FastAPI, Cloud Run, Prometheus, Postgres, Redis, circuit breaker, Python
 
-**Note:** This project is a reproduction and validation of an established industry pattern. It is not a claim of novel research.
-The architecture draws direct inspiration from:
-*   [LMSYS RouteLLM](https://github.com/lm-sys/RouteLLM)
-*   [RouterBench](https://arxiv.org/abs/2403.12031)
-*   "Adaptive" / cost-aware router patterns used in products like Devin and Windsurf.
+**Live demo**: [calibrated-router-768949786238.us-central1.run.app](https://calibrated-router-768949786238.us-central1.run.app) (Cloud Run + Neon Postgres + Upstash Redis, first request after a cold start takes ~40s, warm requests run 2-3s)
 
-Instead of a trained routing model, this project uses a prompted-classifier approach (a small LLM rating difficulty 1-5) with standard, self-hostable tooling (n8n) — deliberately simple, not novel.
+Instead of asking an LLM to guess a prompt's difficulty, a small logistic-regression calibrator (trained on real labeled outcomes, checked for calibration honesty via ECE/Brier, not just accuracy) predicts the probability that a cheap model's draft answer is correct, and the router only escalates to a pricier tier when that predicted error exceeds a configured budget. Served by a real FastAPI service, Postgres logging, Redis caching, retries and a circuit breaker on every provider call, Prometheus/Grafana observability, not a no-code orchestrator.
+
+Full writeup, architecture, real engineering findings (including a broken third-party dependency caught before shipping, a rate-limit discovery, and a tier-pricing inversion that made the whole router pointless until fixed), and honest limitations: **[v2/CASE_STUDY.md](v2/CASE_STUDY.md)**.
+
+## Results
+
+**93.9% cheaper, no measurable quality loss.** Held-out evaluation, 50 prompts never seen during calibrator training, production default ε=0.15 vs. `always_capable` (every prompt sent to Claude Sonnet 5 directly):
+
+| | Router (ε=0.15) | Always-capable |
+| --- | --- | --- |
+| Cost (50 prompts) | $0.00569 | $0.09387 |
+| Accuracy | 96.0% (86.5-98.9% CI) | 92.0% (83.8-97.9% CI), CIs overlap, not statistically distinguishable |
+| At 1M req/month (illustrative) | $113.80/mo | $1,877.40/mo, **$21,163/year saved** |
+
+Full sweep across error budgets, ablation against a naive prompted classifier, and cost-accuracy Pareto frontier in `v2/results/`.
 
 ## Architecture
 
 ```mermaid
-graph TD
-    A[Incoming Prompt] --> B[n8n Webhook]
-    B --> C["Classifier Node: Groq openai/gpt-oss-20b<br/>(reasoning_effort=low)"]
-    C -->|"Rate 1-5: likelihood the cheap model gets it wrong"| D{Switch on Score}
-
-    D -->|Score <= 3| E["Cheap Model: Groq openai/gpt-oss-120b"]
-    D -->|Score >= 4| F["Capable Model: Gemini 3.1 Flash-Lite"]
-
-    E --> G[Compute Metrics Node]
-    F --> G
-
-    G --> H[Webhook Response / Log to CSV]
+graph LR
+  A[Prompt] --> B["Draft call (OpenAI cheap tier)"]
+  B --> C[Feature extraction]
+  C --> D["Calibrator (logistic regression)"]
+  D --> E{"Decision: error budget check"}
+  E -->|"P(correct) high enough"| F[Cheap tier answers]
+  E -->|escalate| G[Mid tier answers]
+  E -->|escalate further| H[Capable tier answers]
 ```
 
-## Results
-
-Run on the full 150-prompt eval set (75 GSM8K + 75 MMLU), real logged API calls, no estimated numbers:
-
-| Metric | Baseline (Capable Only) | Routed (Adaptive) |
+| Tier | Model | Role |
 | --- | --- | --- |
-| Total Cost ($) | 0.0241 | 0.0286 |
-| Accuracy (%) | 88.67 | 89.33 |
-| Average Latency (ms) | 3570.6 | 1805.5 |
-| Capable Model Calls | 150 | 6 |
-| Cheap Model Calls | 0 | 144 |
-
-See `results/comparison_chart.png` for the visual comparison.
-
-### Honest finding: routing won on latency and accuracy, not on raw dollar cost
-
-The classifier correctly discriminates on genuinely hard prompts (it rates open-research-problem-style questions 4-5, and did route 6/150 real eval prompts to the capable tier), but on this benchmark most GSM8K/MMLU questions are within reach of the 120B cheap-tier model, so 144/150 prompts stayed on the cheap tier. Latency dropped 49% and accuracy improved slightly, since the classifier + cheap tier round-trip is still faster in aggregate than always paying the larger model's response time. But total dollar cost came out slightly *higher* for the routed pipeline than the baseline — not because the cheap tier is priced higher (it isn't: $0.15/$0.60 per 1M tokens vs. Gemini's $0.25/$1.50), but because the cheap Groq model answers roughly 2.5x more verbosely per response (avg 229 output tokens vs. Gemini's 91) with no instruction to be concise on either side. This is a real, unmodified finding: **routing savings are gated by response verbosity, not just by per-token price** — a distinction that's easy to miss and worth stress-testing before trusting a router's cost claims in production.
+| Cheap | OpenAI `gpt-5.4-nano` | Answers most requests; its own draft response also feeds the calibrator |
+| Mid | Google `gemini-3.1-flash-lite` | Escalation target when the cheap tier's predicted error exceeds budget |
+| Capable | Anthropic `claude-sonnet-5` | Top of the ladder, trusted fallback |
 
 ## Setup & Running
 
-1. **Environment Setup:**
+1. **Environment:**
    ```bash
+   cd v2
    cp .env.example .env
-   # Add your GROQ_API_KEY and GEMINI_API_KEY
+   # Add OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY
    python3 -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
 
-2. **Prepare the eval set:**
+2. **Infra**: point `DATABASE_URL` / `REDIS_URL` in `.env` at your Postgres/Redis (Neon + Upstash free tiers work well and don't expire), then run the migration:
    ```bash
-   python scripts/prepare_dataset.py
+   alembic upgrade head
    ```
 
-3. **Run the baseline (always-capable-model):**
+3. **Build the eval data and train the calibrator:**
    ```bash
-   python scripts/run_baseline.py
+   python scripts/build_eval_sets.py
+   python scripts/collect_calibration_data.py
+   python scripts/train_calibrator.py
    ```
 
-4. **Start n8n (Docker) and activate the workflow:**
+4. **Run the service:**
    ```bash
-   docker compose up -d
+   uvicorn app.main:app --host 0.0.0.0 --port 8000
    ```
-   Import `n8n/route_demo.json` into the n8n editor at `http://localhost:5678` and publish/activate it so its webhook is live.
+   Visit `http://localhost:8000/` for the live interactive demo, or `POST /route` directly.
 
-5. **Run the routed pipeline:**
+5. **Evaluate and sweep:**
    ```bash
-   python scripts/run_routed.py
+   python scripts/run_eval.py
+   python scripts/budget_sweep.py
    ```
 
-6. **Generate the comparison metrics:**
+6. **Load test:**
    ```bash
-   python scripts/compute_metrics.py
+   locust -f loadtest/locustfile.py --host http://localhost:8000 --headless -u 8 -r 2 -t 45s --csv results/load_test
    ```
-   View `results/comparison_table.md` and `results/comparison_chart.png`.
 
-Set `TEST_MODE=true` before either runner script to process only the first 5 prompts, useful for a fast sanity check before committing to a full 150-prompt run.
+Set `TEST_MODE=true` before `collect_calibration_data.py` or `run_eval.py` to run on 5 prompts first. All commands above are run from `v2/`.
 
 ## Tech Stack
 
-- **Orchestration:** n8n (self-hosted, Docker, Community Edition)
-- **Models:** Groq (`openai/gpt-oss-20b` classifier, `openai/gpt-oss-120b` cheap tier), Google Gemini (`gemini-3.1-flash-lite` capable tier)
-- **Data & analysis:** Python 3.11+, HuggingFace `datasets` (GSM8K + MMLU), pandas, matplotlib
-- **Logging:** flat CSV/JSONL files, no database
-- **Secrets:** `.env` (gitignored), see `.env.example` for required keys
+- **Service:** FastAPI, SQLAlchemy + Alembic, Redis, Prometheus, hand-rolled async circuit breaker (the obvious off-the-shelf choice, `pybreaker`, turned out to be broken, see CASE_STUDY.md)
+- **Models:** OpenAI `gpt-5.4-nano` (cheap), Google `gemini-3.1-flash-lite` (mid), Anthropic `claude-sonnet-5` (capable)
+- **Calibration:** scikit-learn logistic regression over 4 features (logprob uncertainty, self-consistency dispersion, hard-cluster embedding distance, response length)
+- **Infra:** Neon (Postgres, free tier, no expiry), Upstash (Redis, free tier, no expiry), Cloud Run (deployment)
+- **Tests:** pytest, 16 tests covering the decision logic, stats utilities, and full circuit-breaker state machine
 
-## Non-Goals (v1)
+## Prior Art
 
-No Postgres/Redis, no cloud deployment automation, no trained router model, no UI beyond n8n's editor and the results chart/table. See `DEMO_SCRIPT.md` for the video walkthrough storyboard.
+A synthesis of established techniques with real engineering rigor, not a claim of novel research, see `v2/CASE_STUDY.md` for exactly where this implementation diverges from FrugalGPT's full methodology.
 
-## v2: Calibrated Cost-Aware LLM Router
+1. Chen, L., Zaharia, M., & Zou, J. (2023). FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance. Stanford University. [arXiv:2305.05176](https://arxiv.org/abs/2305.05176). Cascade-on-confidence architecture.
+2. LMSYS RouteLLM. [github.com/lm-sys/RouteLLM](https://github.com/lm-sys/RouteLLM). "Learn it, don't prompt for it" critique motivating a trained calibrator over a prompted classifier.
+3. RouterBench. [arXiv:2403.12031](https://arxiv.org/abs/2403.12031). Prior routing-pattern benchmark work.
+4. Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On Calibration of Modern Neural Networks. [arXiv:1706.04599](https://arxiv.org/abs/1706.04599). The Expected Calibration Error (ECE) formula used as the calibration-honesty check.
+5. Wang, X., et al. (2022). Self-Consistency Improves Chain of Thought Reasoning in Language Models. [arXiv:2203.11171](https://arxiv.org/abs/2203.11171). The self-consistency-dispersion feature.
+6. Kang, et al. C3PO-style deferral rules for cascade routing. [arXiv:2604.14251](https://arxiv.org/html/2604.14251). Treating the error-budget threshold as a hyperparameter tuned on held-out data.
+7. Decision-theoretic cascade literature. [arXiv:2605.06350](https://arxiv.org/html/2605.06350).
+8. Cobbe, K., et al. (2021). Training Verifiers to Solve Math Word Problems (GSM8K). [arXiv:2110.14168](https://arxiv.org/abs/2110.14168). Correctness-label benchmark.
+9. Hendrycks, D., et al. (2021). Measuring Massive Multitask Language Understanding (MMLU). [arXiv:2009.03300](https://arxiv.org/abs/2009.03300). Correctness-label benchmark.
 
-**Live demo**: [calibrated-router-768949786238.us-central1.run.app](https://calibrated-router-768949786238.us-central1.run.app)
+## Earlier Prototype (v1)
 
-This repo also contains a production-grade follow-up in [`v2/`](v2/) that replaces v1's prompted "rate 1-5" classifier with a genuinely calibrated statistics model (logistic regression, checked for calibration honesty via ECE/Brier, not just accuracy), served by a real FastAPI service (not n8n) with Postgres logging, Redis caching, retries + a circuit breaker on every provider call, Prometheus/Grafana observability, and a live interactive demo page.
-
-On a held-out 50-prompt evaluation, the calibrated router cuts cost by 93.9% vs. always using the top-tier model, with no measurable accuracy loss (96.0% vs 92.0%, confidence intervals overlap) — see [`v2/CASE_STUDY.md`](v2/CASE_STUDY.md) for the full architecture, the real bugs found and fixed along the way, and the honest limitations.
+Before this FastAPI-based calibrated router, an earlier n8n-orchestrated prototype used a prompted difficulty classifier instead of a trained calibrator. Its code still lives at the repository root (`scripts/`, `n8n/`, `config/`, `results/`); its README, results, and honest findings are preserved at **[v1/README.md](v1/README.md)**.
