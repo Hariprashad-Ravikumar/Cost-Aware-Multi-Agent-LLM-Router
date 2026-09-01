@@ -1,0 +1,4 @@
+{
+  "description": "Production FastAPI service that routes LLM prompts across models (OpenAI, Google Gemini, Anthropic Claude) using a calibrated logistic-regression router. Achieves 93.9% cost reduction vs. always-capable baseline with no measurable quality loss. Features: cost optimization, model calibration, circuit breaker, Prometheus monitoring, Postgres/Redis, Cloud Run deployment.",
+  "topics": ["llm-routing", "cost-optimization", "model-calibration", "fastapi", "cloud-run", "prometheus", "postgres", "redis", "circuit-breaker", "python", "lm-routing", "llm-optimization"]
+}
