@@ -8,13 +8,15 @@ Full writeup, architecture, real engineering findings (including a broken third-
 
 ## Results
 
-Held-out evaluation, 50 prompts never seen during calibrator training. Baseline (`always_capable`, every prompt sent to Claude Sonnet 5 directly): 92.0% accuracy, $0.09387 total cost.
+**93.9% cheaper, no measurable quality loss.** Held-out evaluation, 50 prompts never seen during calibrator training, production default ε=0.15 vs. `always_capable` (every prompt sent to Claude Sonnet 5 directly):
 
-| Error Budget (ε) | Accuracy | Cost | vs. always_capable |
-| --- | --- | --- | --- |
-| **0.15 (production default)** | **96.0%** | **$0.00569** | **+4.0pp accuracy, -93.9% cost** |
+| | Router (ε=0.15) | Always-capable |
+| --- | --- | --- |
+| Cost (50 prompts) | $0.00569 | $0.09387 |
+| Accuracy | 96.0% (86.5-98.9% CI) | 92.0% (83.8-97.9% CI) — CIs overlap, not statistically distinguishable |
+| At 1M req/month (illustrative) | $113.80/mo | $1,877.40/mo — **$21,163/year saved** |
 
-Full sweep, ablation against a naive prompted classifier, and cost-accuracy Pareto frontier in `results/`.
+Full sweep across error budgets, ablation against a naive prompted classifier, and cost-accuracy Pareto frontier in `results/`.
 
 ## Architecture
 

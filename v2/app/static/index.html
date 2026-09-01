@@ -70,10 +70,35 @@
   footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--panel-border); padding-top: 20px; margin-top: 60px; }
   footer a { color: var(--accent); }
   .todo-note { color: var(--warn); font-size: 0.8rem; font-style: italic; }
+
+  .hero-card {
+    background: linear-gradient(160deg, #0e2a20, #0b0d12 70%);
+    border: 1px solid #1f4d3a; border-radius: 16px;
+    padding: 28px 28px 24px; margin-bottom: 40px;
+  }
+  .hero-headline { font-size: 2.1rem; font-weight: 750; letter-spacing: -0.01em; color: var(--good); margin: 0 0 8px; line-height: 1.15; }
+  .hero-sub { color: var(--text); font-size: 0.95rem; margin: 0 0 14px; }
+  .hero-scale { font-size: 1rem; font-weight: 650; margin: 0; }
+  .hero-caption { color: var(--muted); font-size: 0.75rem; margin: 4px 0 0; }
+
+  .counter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-top: 16px; }
+  .counter-card { background: #0e1119; border: 1px solid var(--panel-border); border-radius: 10px; padding: 14px 16px; }
+  .counter-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .counter-value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .counter-value.actual { color: var(--good); }
+  .counter-value.hypothetical { color: var(--muted); text-decoration: line-through; text-decoration-color: #4a5266; }
+  .counter-saved { color: var(--good); }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="hero-card">
+    <p class="hero-headline">93.9% cheaper. No measurable quality loss.</p>
+    <p class="hero-sub">$0.00569 vs $0.09387 per 50 prompts &middot; 96.0% vs 92.0% accuracy (95% CIs overlap) &middot; n=50, verified end-to-end on a held-out set never seen during training.</p>
+    <p class="hero-scale">At 1M requests/month: $113.80 vs $1,877.40 &mdash; <span style="color:var(--good)">$21,163/year saved</span></p>
+    <p class="hero-caption">Illustrative projection from the measured per-prompt cost above, not a claim about any specific deployment's traffic. Full methodology: <code>CASE_STUDY.md</code>.</p>
+  </div>
+
   <header>
     <h1>Calibrated Cost-Aware LLM Router</h1>
     <p class="pitch">Routes each prompt to the cheapest model tier a small, calibrated statistics model predicts will still get it right — not an LLM guessing "how hard is this," a logistic regression trained on real labeled outcomes.</p>
@@ -120,6 +145,25 @@ graph LR
         <div class="answer-box" id="r-answer"></div>
       </div>
       <div class="error" id="error-box"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;" id="counter-panel" hidden>
+      <h2 style="margin-bottom:8px;">Cost savings meter &mdash; this session</h2>
+      <p style="color:var(--muted); font-size:0.82rem; margin:0 0 4px;">Live running total from your actual requests above, vs. what those same prompts would have cost if every one had gone straight to the capable tier (Claude Sonnet 5) &mdash; using the real measured average rate from the 50-prompt evaluation ($0.0018774/prompt), not a live re-query.</p>
+      <div class="counter-grid">
+        <div class="counter-card">
+          <div class="counter-label">Actually spent</div>
+          <div class="counter-value actual" id="c-actual">$0.000000</div>
+        </div>
+        <div class="counter-card">
+          <div class="counter-label">Would have spent</div>
+          <div class="counter-value hypothetical" id="c-hypothetical">$0.000000</div>
+        </div>
+        <div class="counter-card">
+          <div class="counter-label">Saved</div>
+          <div class="counter-value counter-saved" id="c-saved">$0.000000 (0%)</div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -182,6 +226,13 @@ katex.render("\\text{use cheap tier if } (1 - P(\\text{correct})) \\le \\epsilon
 katex.render("\\text{ECE} = \\sum_{m=1}^{M} \\frac{|B_m|}{n} \\left| \\text{acc}(B_m) - \\text{conf}(B_m) \\right|",
   document.getElementById("eq-ece"), { displayMode: true });
 
+// Real measured average cost of always using the capable tier (Claude Sonnet 5),
+// from results/eval_report.md's always_capable row ($0.09387 / 50 prompts). Used only
+// to project "what this session's prompts would have cost" - not a live re-query.
+const HYPOTHETICAL_RATE_PER_PROMPT = 0.0018774;
+let sessionActualCost = 0;
+let sessionPromptsTried = 0;
+
 const examples = {
   easy: "What is 15% of 240?",
   hard: "Prove that the square root of 2 is irrational using a formal proof by contradiction, showing every logical step."
@@ -225,12 +276,32 @@ async function runRoute() {
     result.style.display = "block";
     highlightTier(data.chosen_tier);
     status.textContent = data.cache_hit ? "served from cache" : "";
+    updateCounters(data);
   } catch (e) {
     errorBox.textContent = "Request failed: " + e.message;
   } finally {
     btn.disabled = false;
     if (!errorBox.textContent) status.textContent = status.textContent || "";
   }
+}
+
+function updateCounters(data) {
+  // A cache hit means no new API call was actually made, so its cost_usd reflects
+  // what the ORIGINAL call cost - counting it again here would double-count spend
+  // that didn't really happen twice.
+  if (!data.cache_hit) {
+    sessionActualCost += data.cost_usd;
+  }
+  sessionPromptsTried += 1;
+
+  const hypothetical = sessionPromptsTried * HYPOTHETICAL_RATE_PER_PROMPT;
+  const saved = hypothetical - sessionActualCost;
+  const savedPct = hypothetical > 0 ? (saved / hypothetical) * 100 : 0;
+
+  document.getElementById("c-actual").textContent = "$" + sessionActualCost.toFixed(6);
+  document.getElementById("c-hypothetical").textContent = "$" + hypothetical.toFixed(6);
+  document.getElementById("c-saved").textContent = "$" + saved.toFixed(6) + " (" + savedPct.toFixed(1) + "%)";
+  document.getElementById("counter-panel").hidden = false;
 }
 
 function clearHighlight() {

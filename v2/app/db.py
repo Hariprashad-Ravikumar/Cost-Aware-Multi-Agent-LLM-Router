@@ -35,7 +35,15 @@ def get_session():
     global _engine, _SessionLocal
     if _engine is None:
         url = os.environ.get("DATABASE_URL", "postgresql://router:router@localhost:5432/router")
-        _engine = create_engine(url)
+        # pool_pre_ping: Neon (serverless Postgres) closes idle connections after a
+        # period of inactivity; without this, SQLAlchemy hands out a stale connection
+        # from the pool and the first query on it fails with "SSL connection has been
+        # closed unexpectedly" - crashing an otherwise-successful request just because
+        # the DB write at the end happened to reuse a dead connection. pool_pre_ping
+        # validates the connection before each checkout and transparently reconnects.
+        # pool_recycle caps how long a connection can live in the pool regardless, as a
+        # second safety net against the same class of staleness.
+        _engine = create_engine(url, pool_pre_ping=True, pool_recycle=300)
         # Schema is owned by Alembic (migrations/versions/0001_initial_requests_table.py),
         # not created ad hoc here - run `alembic upgrade head` before starting the service.
         _SessionLocal = sessionmaker(bind=_engine)

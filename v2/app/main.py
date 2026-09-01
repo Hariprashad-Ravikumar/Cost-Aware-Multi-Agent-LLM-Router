@@ -10,6 +10,7 @@ live measurement. This is a real train/serve feature skew, reported explicitly i
 results/eval_report.md rather than concealed by re-running expensive sampling at serve time.
 """
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -51,6 +52,7 @@ TIER_PROVIDER = {
 }
 
 app = FastAPI(title="Calibrated Cost-Aware LLM Router")
+logger = logging.getLogger("router")
 
 requests_total = Counter("router_requests_total", "Total routed requests")
 latency_hist = Histogram("router_latency_seconds", "End-to-end request latency")
@@ -177,27 +179,34 @@ async def route(req: RouteRequest):
     }
     await cache.set_cached_response(req.prompt, "router", result, ttl_seconds=CACHE_TTL)
 
-    session = db.get_session()
+    # Logging is best-effort: the LLM answer above already succeeded and is the thing
+    # the caller actually wants. A transient DB issue (e.g. a serverless Postgres
+    # provider closing an idle connection) shouldn't turn a successful routing decision
+    # into a 500 - log it and still return the real answer.
     try:
-        session.add(
-            db.RoutedRequest(
-                prompt=req.prompt,
-                features=features.as_array().tolist(),
-                predicted_p_correct=decision.predicted_p_correct,
-                error_budget=ERROR_BUDGET,
-                chosen_tier=decision.chosen_tier,
-                escalated=decision.escalated,
-                input_tokens=final.input_tokens,
-                output_tokens=final.output_tokens,
-                cost_usd=cost,
-                latency_ms=latency_ms,
-                correct=correct,
-                cache_hit=False,
+        session = db.get_session()
+        try:
+            session.add(
+                db.RoutedRequest(
+                    prompt=req.prompt,
+                    features=features.as_array().tolist(),
+                    predicted_p_correct=decision.predicted_p_correct,
+                    error_budget=ERROR_BUDGET,
+                    chosen_tier=decision.chosen_tier,
+                    escalated=decision.escalated,
+                    input_tokens=final.input_tokens,
+                    output_tokens=final.output_tokens,
+                    cost_usd=cost,
+                    latency_ms=latency_ms,
+                    correct=correct,
+                    cache_hit=False,
+                )
             )
-        )
-        session.commit()
-    finally:
-        session.close()
+            session.commit()
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error(f"Failed to log request to DB (non-fatal, answer still returned): {e}")
 
     return RouteResponse(id=req.id, correct=correct, **result)
 
