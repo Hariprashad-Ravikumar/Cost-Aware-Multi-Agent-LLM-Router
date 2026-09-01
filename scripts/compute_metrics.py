@@ -2,6 +2,9 @@ import pandas as pd
 import json
 import os
 import matplotlib.pyplot as plt
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def compute_cost(model_name, input_tokens, output_tokens, pricing_data):
     # Default to 0 if model not found
@@ -30,8 +33,8 @@ def main():
     with open(config_path, "r") as f:
         pricing_data = json.load(f)
         
-    # ROUTER overhead model cost (hardcoded from architecture for demo)
-    router_model = "llama-3.1-8b-instant"
+    # ROUTER overhead model cost (classifier calls are always made on the fast/cheap tier)
+    router_model = os.getenv("ROUTER_MODEL", "openai/gpt-oss-20b")
     
     # Process Baseline
     baseline_df = pd.read_csv(baseline_path)

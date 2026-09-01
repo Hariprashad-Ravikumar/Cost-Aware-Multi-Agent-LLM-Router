@@ -31,7 +31,7 @@ def main():
     client = genai.Client(api_key=GEMINI_API_KEY)
     
     # Configuration
-    model_name = os.getenv("CAPABLE_MODEL", "gemini-3.6-flash")
+    model_name = os.getenv("CAPABLE_MODEL", "gemini-3.1-flash-lite")
     
     # Paths
     project_root = os.path.dirname(os.path.dirname(__file__))

@@ -1,4 +1,5 @@
 {
+  "id": "ROfMGY29v9IdcBfy",
   "name": "RouteDemo - Cost-Aware Multi-Agent LLM Router",
   "nodes": [
     {
@@ -24,7 +25,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer {{$env.GROQ_API_KEY}}"
+              "value": "=Bearer {{$env.GROQ_API_KEY}}"
             },
             {
               "name": "Content-Type",
@@ -37,15 +38,19 @@
           "parameters": [
             {
               "name": "model",
-              "value": "llama-3.1-8b-instant"
+              "value": "={{ $env.ROUTER_MODEL }}"
             },
             {
               "name": "messages",
-              "value": "={{ [ { \"role\": \"user\", \"content\": \"Rate difficulty 1-5, respond with only the digit for this prompt: \" + $json.body.prompt } ] }}"
+              "value": "={{ [ { \"role\": \"user\", \"content\": \"Rate how likely a small, fast language model is to get this prompt WRONG, on a scale of 1 (very likely correct, trivial) to 5 (very likely wrong, needs a stronger model - e.g. specialized domain knowledge, multi-step reasoning, or nuanced judgment). Respond with only the digit. Prompt: \" + $json.body.prompt } ] }}"
             },
             {
               "name": "temperature",
-              "value": "0"
+              "value": "={{ 0 }}"
+            },
+            {
+              "name": "reasoning_effort",
+              "value": "low"
             }
           ]
         },
@@ -94,7 +99,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer {{$env.GROQ_API_KEY}}"
+              "value": "=Bearer {{$env.GROQ_API_KEY}}"
             },
             {
               "name": "Content-Type",
@@ -107,7 +112,7 @@
           "parameters": [
             {
               "name": "model",
-              "value": "llama-3.3-70b-versatile"
+              "value": "={{ $env.FAST_MODEL }}"
             },
             {
               "name": "messages",
@@ -155,7 +160,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const inputData = $input.all()[0].json;\nconst webhookData = $('Webhook').item.json.body;\nconst classifierData = $('Difficulty Classifier (Groq)').item.json;\n\nlet rawAnswer = '';\nlet inputTokens = 0;\nlet outputTokens = 0;\nlet modelUsed = '';\n\nif (inputData.choices) {\n  // It came from Groq (Cheap Model)\n  rawAnswer = inputData.choices[0].message.content;\n  inputTokens = inputData.usage.prompt_tokens;\n  outputTokens = inputData.usage.completion_tokens;\n  modelUsed = 'groq-cheap';\n} else if (inputData.candidates) {\n  // It came from Gemini (Capable Model)\n  rawAnswer = inputData.candidates[0].content.parts[0].text;\n  inputTokens = inputData.usageMetadata ? inputData.usageMetadata.promptTokenCount : 0;\n  outputTokens = inputData.usageMetadata ? inputData.usageMetadata.candidatesTokenCount : 0;\n  modelUsed = 'gemini-capable';\n}\n\n// Add classifier token overhead (approximate or extracted if needed)\nconst classifierInputTokens = classifierData.usage ? classifierData.usage.prompt_tokens : 0;\nconst classifierOutputTokens = classifierData.usage ? classifierData.usage.completion_tokens : 0;\n\nconst groundTruth = webhookData.ground_truth;\nlet correct = false;\nif (groundTruth) {\n  correct = rawAnswer.toLowerCase().includes(groundTruth.toString().toLowerCase());\n}\n\nreturn {\n  id: webhookData.id,\n  model: modelUsed,\n  difficulty_score: $('Switch (Score <= 3 vs >= 4)').item.json.value1,\n  input_tokens: inputTokens,\n  output_tokens: outputTokens,\n  classifier_input_tokens: classifierInputTokens,\n  classifier_output_tokens: classifierOutputTokens,\n  raw_answer: rawAnswer,\n  correct: correct\n};"
+        "jsCode": "const inputData = $input.all()[0].json;\nconst webhookData = $('Webhook').item.json.body;\nconst classifierData = $('Difficulty Classifier (Groq)').item.json;\n\nlet rawAnswer = '';\nlet inputTokens = 0;\nlet outputTokens = 0;\nlet modelUsed = '';\n\nif (inputData.choices) {\n  // It came from Groq (Cheap Model)\n  rawAnswer = inputData.choices[0].message.content;\n  inputTokens = inputData.usage.prompt_tokens;\n  outputTokens = inputData.usage.completion_tokens;\n  modelUsed = 'groq-cheap';\n} else if (inputData.candidates) {\n  // It came from Gemini (Capable Model)\n  rawAnswer = inputData.candidates[0].content.parts[0].text;\n  inputTokens = inputData.usageMetadata ? inputData.usageMetadata.promptTokenCount : 0;\n  outputTokens = inputData.usageMetadata ? inputData.usageMetadata.candidatesTokenCount : 0;\n  modelUsed = 'gemini-capable';\n}\n\n// Add classifier token overhead (approximate or extracted if needed)\nconst classifierInputTokens = classifierData.usage ? classifierData.usage.prompt_tokens : 0;\nconst classifierOutputTokens = classifierData.usage ? classifierData.usage.completion_tokens : 0;\n\nconst classifierMatch = classifierData.choices[0].message.content.match(/\\d/);\nconst difficultyScore = classifierMatch ? parseInt(classifierMatch[0]) : 1;\n\nconst groundTruth = webhookData.ground_truth;\nlet correct = false;\nif (groundTruth) {\n  correct = rawAnswer.toLowerCase().includes(groundTruth.toString().toLowerCase());\n}\n\nreturn {\n  id: webhookData.id,\n  model: modelUsed,\n  difficulty_score: difficultyScore,\n  input_tokens: inputTokens,\n  output_tokens: outputTokens,\n  classifier_input_tokens: classifierInputTokens,\n  classifier_output_tokens: classifierOutputTokens,\n  raw_answer: rawAnswer,\n  correct: correct\n};"
       },
       "id": "merge-compute-node",
       "name": "Compute Metrics",
