@@ -10,7 +10,7 @@ Instead of asking an LLM to guess a prompt's difficulty, a small logistic-regres
 
 Full writeup, architecture, real engineering findings (including a broken third-party dependency caught before shipping, a rate-limit discovery, and a tier-pricing inversion that made the whole router pointless until fixed), and honest limitations: **[v2/CASE_STUDY.md](v2/CASE_STUDY.md)**.
 
-![Live demo of the cost-aware LLM router](https://hariprashad-ravikumar.github.io/video/cost-aware-llm-router-full-demo.gif)
+![Live demo of the cost-aware LLM router](assets/demo.gif)
 
 ## Results
 
