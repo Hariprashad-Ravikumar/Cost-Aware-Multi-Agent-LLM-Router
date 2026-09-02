@@ -941,7 +941,7 @@ async function resolveAssistantTurn(el, data) {
   }
   const provider = TIER_PROVIDER_INFO[data.chosen_tier];
   const badgeHtml = provider
-    ? `<div class="model-badge"><svg viewBox="0 0 24 24" width="14" height="14" style="fill:${provider.color}"><path d="${provider.path}"/></svg>` +
+    ? `<div class="model-badge"><svg viewBox="0 0 24 24" width="20" height="20" style="fill:${provider.color}"><path d="${provider.path}"/></svg>` +
       `<strong>${escapeHtml(provider.name)}</strong> &middot; selected by Cost-Aware LLM Router</div>`
     : "";
 

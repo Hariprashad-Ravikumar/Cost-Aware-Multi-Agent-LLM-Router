@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response, HTMLResponse
@@ -281,6 +282,12 @@ async def health_detail():
 @app.get("/metrics")
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# Registered after the explicit routes above, so it only catches paths those routes
+# don't handle (e.g. /headshot.webp) - the "/" route above still serves the
+# rendered index.html rather than a raw file listing.
+app.mount("/", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 _embedder = None
