@@ -49,3 +49,7 @@ v2/redis_data/
 v2/grafana_data/
 v2/.pytest_cache/
 *.db
+
+# Internal dev notes and drafts not meant for the public repo
+v2/HANDOFF.md
+/linkedin-article/
