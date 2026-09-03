@@ -393,6 +393,43 @@
   .meta-chip strong { color: var(--text); font-weight: 650; }
   .turn-error .assistant-answer { color: #f87171; }
 
+  /* ---------- mode toggle: single-call /route vs conversational /route/multi-agent ---------- */
+  .mode-row { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; flex-wrap: wrap; }
+  .mode-toggle {
+    display: flex; background: rgba(0,0,0,0.28); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 3px; gap: 3px;
+  }
+  .mode-btn {
+    background: transparent; color: var(--muted); border: none; border-radius: 7px;
+    padding: 6px 11px; font-size: 0.72rem; font-weight: 600; cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .mode-btn.active { background: var(--accent); color: white; }
+  .mode-btn:not(.active):hover { background: rgba(255,255,255,0.06); color: var(--text); }
+  .new-convo-btn {
+    background: rgba(255,255,255,0.04); color: var(--muted); border: 1px solid var(--panel-border);
+    border-radius: 8px; padding: 6px 10px; font-size: 0.7rem; font-weight: 600; cursor: pointer;
+  }
+  .new-convo-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .mode-hint { font-size: 0.68rem; color: var(--muted); width: 100%; }
+
+  .subtask-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
+  .subtask-badge {
+    display: flex; align-items: center; gap: 5px; font-size: 0.7rem; color: var(--muted);
+    background: rgba(0,0,0,0.22); border: 1px solid var(--panel-border); border-radius: 7px;
+    padding: 3px 8px 3px 6px;
+  }
+  .subtask-badge strong { color: var(--text); font-weight: 650; }
+  .trace-list {
+    margin-top: 9px; font-size: 0.68rem; color: var(--muted);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    background: rgba(0,0,0,0.18); border: 1px solid var(--panel-border); border-radius: 8px;
+    padding: 8px 10px; display: flex; flex-direction: column; gap: 3px;
+  }
+  .trace-list summary { cursor: pointer; color: var(--muted); font-family: -apple-system, sans-serif; font-size: 0.7rem; }
+  .trace-list summary:hover { color: var(--text); }
+  .trace-line::before { content: "→ "; opacity: 0.5; }
+
   .composer { flex: none; padding-top: 12px; margin-top: 8px; }
   .composer-pill {
     display: flex; align-items: flex-end; gap: 6px;
@@ -659,9 +696,17 @@
     <!-- RIGHT: try it live -->
     <div class="col col-right glass">
       <h2>Try it live</h2>
+      <div class="mode-row">
+        <div class="mode-toggle" role="tablist" aria-label="Router mode">
+          <button class="mode-btn active" id="mode-btn-single" onclick="setMode('single')">Single-call</button>
+          <button class="mode-btn" id="mode-btn-multi" onclick="setMode('multi')">Multi-agent (conversational)</button>
+        </div>
+        <button class="new-convo-btn" id="new-convo-btn" onclick="startNewConversation()" hidden>New conversation</button>
+        <p class="mode-hint" id="mode-hint">One prompt, one calibrated decision - no memory of earlier turns.</p>
+      </div>
       <div id="chat-log" class="chat-log">
         <div class="chat-empty" id="chat-empty">
-          <p class="chat-empty-hint">Send a prompt to see the calibrator route it live.</p>
+          <p class="chat-empty-hint" id="chat-empty-hint">Send a prompt to see the calibrator route it live.</p>
           <div class="chat-suggestions">
             <button class="chip" onclick="useSuggestion('easy')">What is 15% of 240?</button>
             <button class="chip" onclick="useSuggestion('hard')">Prove &radic;2 is irrational by contradiction</button>
@@ -810,6 +855,53 @@ const TIER_PROVIDER_INFO = {
 function useSuggestion(kind) {
   document.getElementById("prompt-input").value = examples[kind];
   runRoute();
+}
+
+// ---------- mode: single-call /route (default, unchanged) vs conversational
+// /route/multi-agent (planner + specialist tiers + synthesizer, app/agents/), which
+// carries a session_id across turns so a follow-up like "minus 6 from the result"
+// resolves against the actual prior turn instead of being answered with zero context -
+// see v2/MULTI_AGENT.md. The two endpoints return different response shapes (a single
+// chosen_tier/predicted_p_correct vs. a list of subtasks + a trace), so they get
+// separate renderers below rather than forcing one endpoint's shape onto the other.
+let currentMode = "single";
+let multiAgentSessionId = null;
+
+function newSessionId() {
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "sess-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById("mode-btn-single").classList.toggle("active", mode === "single");
+  document.getElementById("mode-btn-multi").classList.toggle("active", mode === "multi");
+  document.getElementById("new-convo-btn").hidden = mode !== "multi";
+
+  const hint = document.getElementById("mode-hint");
+  const emptyHint = document.getElementById("chat-empty-hint");
+  if (mode === "multi") {
+    if (!multiAgentSessionId) multiAgentSessionId = newSessionId();
+    hint.textContent = "Conversational: a planner splits the request across tiers and remembers this conversation's earlier turns.";
+    if (emptyHint) emptyHint.textContent = "Send a prompt - follow-ups like “minus 6 from the result” will resolve against earlier turns in this conversation.";
+  } else {
+    hint.textContent = "One prompt, one calibrated decision - no memory of earlier turns.";
+    if (emptyHint) emptyHint.textContent = "Send a prompt to see the calibrator route it live.";
+  }
+}
+
+// Starts a fresh multi-agent conversation: new session_id, chat log cleared. Does not
+// touch the cost-savings meter below - that tracks real spend across this whole browser
+// tab, not any one conversation.
+function startNewConversation() {
+  multiAgentSessionId = newSessionId();
+  const log = document.getElementById("chat-log");
+  log.innerHTML =
+    '<div class="chat-empty" id="chat-empty">' +
+    '<p class="chat-empty-hint" id="chat-empty-hint">Send a prompt - follow-ups like “minus 6 from the result” will resolve against earlier turns in this conversation.</p>' +
+    '<div class="chat-suggestions">' +
+    '<button class="chip" onclick="useSuggestion(\'easy\')">What is 15% of 240?</button>' +
+    '<button class="chip" onclick="useSuggestion(\'hard\')">Prove &radic;2 is irrational by contradiction</button>' +
+    "</div></div>";
 }
 
 function escapeHtml(s) {
@@ -965,6 +1057,36 @@ function resolveAssistantTurnError(el, message) {
   scrollChatToBottom();
 }
 
+// Renders a /route/multi-agent response: one badge per sub-task (it may have gone to
+// a different tier than its siblings - real parallel dispatch, not one fixed choice),
+// the synthesized answer, and the trace log as the actual audit trail of what each
+// agent node did - the thing this mode exists to show off, per v2/MULTI_AGENT.md.
+async function resolveAssistantTurnMultiAgent(el, data) {
+  const badgesHtml = data.subtasks.map(st => {
+    const provider = TIER_PROVIDER_INFO[st.tier];
+    const label = provider ? provider.name : (st.tier === "failed" ? "unavailable" : st.tier);
+    const icon = provider
+      ? `<svg viewBox="0 0 24 24" width="14" height="14" style="fill:${provider.color}"><path d="${provider.path}"/></svg>`
+      : "";
+    return `<span class="subtask-badge">${icon}<strong>${escapeHtml(label)}</strong> &middot; $${st.cost_usd.toFixed(5)} &middot; ${st.latency_ms}ms</span>`;
+  }).join("");
+
+  const traceHtml = data.trace.map(line => `<div class="trace-line">${escapeHtml(line)}</div>`).join("");
+
+  el.innerHTML =
+    `<div class="subtask-badges">${badgesHtml}</div>` +
+    '<div class="assistant-answer"></div>' +
+    '<div class="assistant-meta">' +
+    `<span class="meta-chip">sub-tasks: <strong>${data.subtasks.length}</strong></span>` +
+    `<span class="meta-chip">total cost: <strong>$${data.total_cost_usd.toFixed(5)}</strong></span>` +
+    `<span class="meta-chip">latency: <strong>${data.latency_ms} ms</strong></span>` +
+    "</div>" +
+    `<details class="trace-list"><summary>agent trace (${data.trace.length} steps)</summary>${traceHtml}</details>`;
+  scrollChatToBottom();
+  await typewriterReveal(el.querySelector(".assistant-answer"), data.answer);
+  scrollChatToBottom();
+}
+
 // ---------- architecture diagram: driven by the real fetch() lifecycle below,
 // never by a decorative timer. The idle shimmer on edges (CSS-only, always on)
 // is the only "ambient" motion, and it never touches node state or the tier
@@ -1007,27 +1129,36 @@ async function runRoute() {
   input.value = "";
   appendUserTurn(prompt);
   const assistantEl = appendAssistantPlaceholder();
-  resetDiagramResult();
-  setDiagramProcessing(true); // genuine in-flight state, driven by this fetch's real lifecycle
+  const isMulti = currentMode === "multi";
+  if (!isMulti) {
+    // The architecture diagram visualizes the single-call calibrator path
+    // (draft -> features -> calibrator -> tier decision) - multi-agent mode runs a
+    // different graph entirely (planner -> specialists -> synthesizer, no calibrator
+    // call in that path at all), so highlighting it there would just be wrong.
+    resetDiagramResult();
+    setDiagramProcessing(true); // genuine in-flight state, driven by this fetch's real lifecycle
+  }
 
-  // Warm requests resolve in 2-3s; a cold Cloud Run instance (container start +
-  // calibrator load + real provider call) takes ~40s. Rather than guess up front,
-  // wait past the warm ceiling and only then tell the user what's actually happening -
-  // so this note never appears on a normal warm request.
+  // Warm requests resolve in a few seconds; a cold Cloud Run instance (container start +
+  // model load + real provider call) takes ~40s. Rather than guess up front, wait past
+  // the warm ceiling and only then tell the user what's actually happening - so this
+  // note never appears on a normal warm request.
   const coldStartTimer = setTimeout(() => {
     const statusText = assistantEl.querySelector(".status-text");
     if (statusText) {
       statusText.textContent =
         "still working: first request after a cold start can take about 40s " +
-        "(container start, model load, real provider call). It'll be 2-3s after that.";
+        "(container start, model load, real provider call). It'll be faster after that.";
     }
   }, 5000);
 
   try {
-    const res = await fetch("/route", {
+    const url = isMulti ? "/route/multi-agent" : "/route";
+    const body = isMulti ? { prompt, session_id: multiAgentSessionId } : { prompt };
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       const detail = await res.json().catch(() => ({}));
@@ -1035,9 +1166,14 @@ async function runRoute() {
     }
     const data = await res.json();
 
-    resolveAssistantTurn(assistantEl, data);
-    settleDiagram(data.chosen_tier, data.predicted_p_correct);
-    updateCounters(data);
+    if (isMulti) {
+      resolveAssistantTurnMultiAgent(assistantEl, data);
+      updateCounters(data.total_cost_usd, false);
+    } else {
+      resolveAssistantTurn(assistantEl, data);
+      settleDiagram(data.chosen_tier, data.predicted_p_correct);
+      updateCounters(data.cost_usd, data.cache_hit);
+    }
   } catch (e) {
     setDiagramProcessing(false);
     resolveAssistantTurnError(assistantEl, e.message);
@@ -1047,12 +1183,13 @@ async function runRoute() {
   }
 }
 
-function updateCounters(data) {
-  // A cache hit means no new API call was actually made, so its cost_usd reflects
-  // what the ORIGINAL call cost - counting it again here would double-count spend
-  // that didn't really happen twice.
-  if (!data.cache_hit) {
-    sessionActualCost += data.cost_usd;
+function updateCounters(costUsd, cacheHit) {
+  // A cache hit means no new API call was actually made, so its cost reflects what the
+  // ORIGINAL call cost - counting it again here would double-count spend that didn't
+  // really happen twice. Multi-agent mode never hits this path (cacheHit is always
+  // false there) since /route/multi-agent has no cache layer.
+  if (!cacheHit) {
+    sessionActualCost += costUsd;
   }
   sessionPromptsTried += 1;
 
