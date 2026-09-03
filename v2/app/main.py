@@ -9,15 +9,17 @@ calibrator receives a neutral default (0.0) for self_consistency_dispersion inst
 live measurement. This is a real train/serve feature skew, reported explicitly in
 results/eval_report.md rather than concealed by re-running expensive sampling at serve time.
 """
-import json
 import logging
 import os
 import time
+import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from pydantic import BaseModel
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response, HTMLResponse
@@ -25,52 +27,54 @@ from fastapi.responses import Response, HTMLResponse
 from sqlalchemy import text as sql_text
 
 from app import cache, db
+from app.agents import session as agent_session
+from app.agents.graph import compile_graph
+from app.embeddings import get_embedder as _get_embedder
 from app.providers import gemini, openai as openai_provider, anthropic as anthropic_provider
 from app.providers.base import ProviderError
 from app.router.decision import decide_tier
 from app.router.calibrator import get_calibrator
 from app.router.features import build_feature_vector
+from app.tiers import (
+    PRICING,
+    CHEAP_MODEL,
+    MID_MODEL,
+    CAPABLE_MODEL,
+    TIER_PROVIDER,
+    CONCISE_SYSTEM_PROMPT,
+    compute_cost as _compute_cost,
+    call_tier as _call_tier,
+)
 
-_PRICING_PATH = Path(__file__).resolve().parent.parent / "config" / "pricing.json"
-with open(_PRICING_PATH) as f:
-    PRICING = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
-
-CHEAP_MODEL = os.environ.get("CHEAP_MODEL", "gpt-5.4-nano")
-# Mid/capable tiers deliberately swapped from the original assignment: Claude Haiku 4.5
-# ($1.00/$5.00 per 1M) is priced ABOVE Gemini 3.1 Flash-Lite ($0.25/$1.50) - verified
-# directly against config/pricing.json, not assumed - which inverted the tier ladder's
-# cost ordering and made every escalation-to-mid strictly cost-dominated by going
-# straight to the old "capable" tier. Gemini now sits in mid (cheaper, escalate here
-# first); Claude Sonnet 5 ($2.00/$10.00) is the new capable tier, genuinely priced and
-# positioned above both. See CASE_STUDY.md for the full diagnosis.
-MID_MODEL = os.environ.get("MID_MODEL", "gemini-3.1-flash-lite")
-CAPABLE_MODEL = os.environ.get("CAPABLE_MODEL", "claude-sonnet-5")
 ERROR_BUDGET = float(os.environ.get("ERROR_BUDGET", "0.05"))
 CACHE_TTL = int(os.environ.get("CACHE_TTL_SECONDS", "3600"))
 
-# Applied only to escalation-tier calls (mid/capable), never the cheap-tier draft
-# call - response_length_chars is one of the calibrator's four trained features
-# (app/router/features.py), computed from that exact draft response, and
-# scripts/collect_calibration_data.py collected training data with no system
-# prompt. Biasing the draft call's length would skew a trained feature away from
-# what the calibrator actually learned from; escalation answers don't feed that
-# feature, so they're safe to shorten.
-CONCISE_SYSTEM_PROMPT = (
-    "Default to a concise answer: give the direct answer first, then at most one "
-    "short line of explanation or reasoning. Do not add extra caveats, "
-    "restatements, or elaboration beyond that. If the user's own message "
-    "explicitly asks for more detail, more steps, a full explanation, or "
-    "clarification, give the fuller answer they asked for instead."
-)
-
-TIER_PROVIDER = {
-    "cheap": ("openai", CHEAP_MODEL),
-    "mid": ("gemini", MID_MODEL),
-    "capable": ("anthropic", CAPABLE_MODEL),
-}
-
-app = FastAPI(title="Calibrated Cost-Aware LLM Router")
 logger = logging.getLogger("router")
+
+_multi_agent_graph = None
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    global _multi_agent_graph
+    database_url = os.environ.get("DATABASE_URL", "postgresql://router:router@localhost:5432/router")
+    # Same graceful-degradation stance as _get_embedder(): the multi-agent endpoint's
+    # state checkpointing is an enhancement (resumable/durable runs), not a hard
+    # dependency - a DB outage at startup shouldn't take down the whole service,
+    # including the unrelated single-call /route endpoint.
+    try:
+        async with AsyncPostgresSaver.from_conn_string(database_url) as checkpointer:
+            await checkpointer.setup()
+            _multi_agent_graph = compile_graph(checkpointer=checkpointer)
+            logger.info("multi-agent graph compiled with Postgres checkpointing")
+            yield
+    except Exception as e:
+        logger.error(f"Postgres checkpointer unavailable, multi-agent graph running without persistence: {e}")
+        _multi_agent_graph = compile_graph(checkpointer=None)
+        yield
+
+
+app = FastAPI(title="Calibrated Cost-Aware LLM Router", lifespan=_lifespan)
 
 requests_total = Counter("router_requests_total", "Total routed requests")
 latency_hist = Histogram("router_latency_seconds", "End-to-end request latency")
@@ -100,30 +104,10 @@ class RouteResponse(BaseModel):
     cache_hit: bool
 
 
-def _compute_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    rates = PRICING.get(model)
-    if not rates:
-        return 0.0
-    return (input_tokens / 1_000_000) * rates["input_cost_per_1m"] + (
-        output_tokens / 1_000_000
-    ) * rates["output_cost_per_1m"]
-
-
 def _check_correct(answer: str, ground_truth: str | None) -> bool | None:
     if ground_truth is None:
         return None
     return ground_truth.strip().lower() in answer.strip().lower()
-
-
-async def _call_tier(tier: str, prompt: str, logprobs: bool = False, system_prompt: str | None = None):
-    provider_name, model = TIER_PROVIDER[tier]
-    if provider_name == "openai":
-        return await openai_provider.complete(prompt, model, logprobs=logprobs, system_prompt=system_prompt)
-    if provider_name == "gemini":
-        return await gemini.complete(prompt, model, system_prompt=system_prompt)
-    if provider_name == "anthropic":
-        return await anthropic_provider.complete(prompt, model, system_prompt=system_prompt)
-    raise ValueError(f"Unknown provider for tier {tier}: {provider_name}")
 
 
 @app.post("/route", response_model=RouteResponse)
@@ -234,6 +218,80 @@ async def route(req: RouteRequest):
     return RouteResponse(id=req.id, correct=correct, **result)
 
 
+class MultiAgentRequest(BaseModel):
+    id: str | None = None
+    prompt: str
+    # Opt-in: omitted means one-shot/stateless, same as before. Provided means this
+    # request is one turn of an ongoing conversation - the caller generates it for the
+    # first turn and passes the same value back on every follow-up. See
+    # app/agents/session.py for what this actually tracks and why it's a separate
+    # layer from the long-term pgvector memory.
+    session_id: str | None = None
+
+
+class MultiAgentSubtaskResult(BaseModel):
+    subtask_id: str
+    tier: str
+    model: str
+    answer: str
+    cost_usd: float
+    latency_ms: int
+
+
+class MultiAgentResponse(BaseModel):
+    id: str | None
+    session_id: str | None
+    answer: str
+    subtasks: list[MultiAgentSubtaskResult]
+    trace: list[str]
+    total_cost_usd: float
+    latency_ms: int
+
+
+@app.post("/route/multi-agent", response_model=MultiAgentResponse)
+async def route_multi_agent(req: MultiAgentRequest):
+    """Planner + specialist-tiers + synthesizer graph (app/agents/), separate from the
+    single-call /route endpoint above - see v2/MULTI_AGENT.md for the design.
+    """
+    start = time.monotonic()
+    run_id = req.id or str(uuid.uuid4())
+
+    conversation_history = await agent_session.get_history(req.session_id) if req.session_id else []
+
+    config = {"configurable": {"thread_id": run_id}}
+    final_state = await _multi_agent_graph.ainvoke(
+        {
+            "original_request": req.prompt,
+            "ground_truth": None,
+            "retrieved_memory": [],
+            "conversation_history": conversation_history,
+            "subtasks": [],
+            "results": {},
+            "final_answer": None,
+            "trace": [],
+        },
+        config=config,
+    )
+
+    latency_ms = int((time.monotonic() - start) * 1000)
+    subtask_results = sorted(final_state["results"].values(), key=lambda r: r["subtask_id"])
+    total_cost = sum(r["cost_usd"] for r in subtask_results)
+    final_answer = final_state["final_answer"] or ""
+
+    if req.session_id:
+        await agent_session.append_turn(req.session_id, req.prompt, final_answer)
+
+    return MultiAgentResponse(
+        id=run_id,
+        session_id=req.session_id,
+        answer=final_answer,
+        subtasks=[MultiAgentSubtaskResult(**r) for r in subtask_results],
+        trace=final_state["trace"],
+        total_cost_usd=total_cost,
+        latency_ms=latency_ms,
+    )
+
+
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
@@ -288,23 +346,6 @@ async def metrics():
 # don't handle (e.g. /headshot.webp) - the "/" route above still serves the
 # rendered index.html rather than a raw file listing.
 app.mount("/", StaticFiles(directory=_STATIC_DIR), name="static")
-
-
-_embedder = None
-_embedder_load_attempted = False
-
-
-def _get_embedder():
-    global _embedder, _embedder_load_attempted
-    if not _embedder_load_attempted:
-        _embedder_load_attempted = True
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            _embedder = SentenceTransformer("all-MiniLM-L6-v2")
-        except Exception:
-            _embedder = None  # graceful degradation - features.py handles None embeddings
-    return _embedder
 
 
 _hard_cluster_centroid = None

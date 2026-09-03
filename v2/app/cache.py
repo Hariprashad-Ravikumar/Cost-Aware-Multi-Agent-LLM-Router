@@ -15,6 +15,12 @@ def _get_client() -> redis.Redis:
     return _client
 
 
+def get_client() -> redis.Redis:
+    """Public accessor for the shared Redis client - used by app/agents/session.py
+    for conversation history, so it doesn't reach into the private _get_client()."""
+    return _get_client()
+
+
 async def ping() -> bool:
     return await _get_client().ping()
 

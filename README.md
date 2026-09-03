@@ -43,6 +43,13 @@ graph LR
 | Mid | Google `gemini-3.1-flash-lite` | Escalation target when the cheap tier's predicted error exceeds budget |
 | Capable | Anthropic `claude-sonnet-5` | Top of the ladder, trusted fallback |
 
+**Multi-agent mode:** `POST /route/multi-agent` adds a second path where a planner
+decomposes a request into sub-tasks, independent specialist agents work each one on
+these same tiers, and a synthesizer combines the results - with a LangGraph shared-state
+object handling live context handoff and a pgvector-backed memory layer for long-term
+recall across requests. Full design, and why "MCP + RAG" alone isn't actually the
+right pattern for this: **[v2/MULTI_AGENT.md](v2/MULTI_AGENT.md)**.
+
 ## Setup & Running
 
 1. **Environment:**
