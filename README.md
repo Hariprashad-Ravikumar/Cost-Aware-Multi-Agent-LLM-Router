@@ -2,9 +2,9 @@
 
 **Version:** v2.0, production FastAPI service with a calibrated router. Earlier prototype: see [v1/README.md](v1/README.md).
 
-**Tags:** LLM routing, cost optimization, model calibration, FastAPI, Cloud Run, Prometheus, Postgres, Redis, circuit breaker, Python
+**Tags:** LLM routing, cost optimization, model calibration, FastAPI, Cloud Run, Prometheus, Postgres, Redis, circuit breaker, Python, multi-agent orchestration, LangGraph
 
-**Live demo**: [calibrated-router-768949786238.us-central1.run.app](https://calibrated-router-768949786238.us-central1.run.app) (Cloud Run + Neon Postgres + Upstash Redis, first request after a cold start takes ~40s, warm requests run 2-3s)
+**Live demo**: [calibrated-router-768949786238.us-central1.run.app](https://calibrated-router-768949786238.us-central1.run.app) (Cloud Run + Neon Postgres + Upstash Redis, first request after a cold start takes ~40s, warm requests run 2-3s). The "Try it live" panel has a mode toggle: Single-call is the router below, Multi-agent (conversational) is the planner/specialist/synthesizer flow described further down.
 
 Instead of asking an LLM to guess a prompt's difficulty, a small logistic-regression calibrator (trained on real labeled outcomes, checked for calibration honesty via ECE/Brier, not just accuracy) predicts the probability that a cheap model's draft answer is correct, and the router only escalates to a pricier tier when that predicted error exceeds a configured budget. Served by a real FastAPI service, Postgres logging, Redis caching, retries and a circuit breaker on every provider call, Prometheus/Grafana observability, not a no-code orchestrator.
 
@@ -43,12 +43,36 @@ graph LR
 | Mid | Google `gemini-3.1-flash-lite` | Escalation target when the cheap tier's predicted error exceeds budget |
 | Capable | Anthropic `claude-sonnet-5` | Top of the ladder, trusted fallback |
 
-**Multi-agent mode:** `POST /route/multi-agent` adds a second path where a planner
-decomposes a request into sub-tasks, independent specialist agents work each one on
-these same tiers, and a synthesizer combines the results - with a LangGraph shared-state
-object handling live context handoff and a pgvector-backed memory layer for long-term
-recall across requests. Full design, and why "MCP + RAG" alone isn't actually the
-right pattern for this: **[v2/MULTI_AGENT.md](v2/MULTI_AGENT.md)**.
+## Multi-Agent Mode
+
+`POST /route/multi-agent` is a second path alongside the single-call router above. A
+planner decomposes a request into sub-tasks, independent specialist agents run each one
+in parallel on these same three tiers, and a synthesizer combines the results. Agents
+share context through a typed LangGraph state object, not by re-sending raw transcripts.
+Underneath that sit two separate memory layers: session-scoped Redis history, so "minus
+6 from the result" resolves against the actual prior turn, and pgvector-backed recall on
+the same Neon Postgres, so facts persist across separate conversations. That's not "MCP
++ RAG," a framing people reach for here that doesn't actually fit - see
+**[v2/MULTI_AGENT.md](v2/MULTI_AGENT.md)** for the full design and why.
+
+```mermaid
+graph LR
+  A[Request] --> B["Planner (capable tier): decomposes into sub-tasks"]
+  B -->|parallel dispatch| C1["Specialist: cheap/mid/capable"]
+  B -->|parallel dispatch| C2["Specialist: cheap/mid/capable"]
+  C1 --> D["Synthesizer: combines results"]
+  C2 --> D
+  D --> E[Final answer]
+  F[("Session memory: Redis")] -. this conversation's turns .-> B
+  G[("Long-term memory: pgvector")] -. cross-session recall .-> B
+```
+
+Sub-tasks fan out via LangGraph's `Send` API as independent node invocations, each
+specialist choosing its own tier, so the parallel dispatch is real rather than one node
+looping over a list. Tested live on the deployed Cloud Run service in a single
+conversation: a formal proof landed on the `mid` tier, a follow-up question about it
+correctly recalled the answer and dropped to `cheap`, and a second proof was split into
+two sub-tasks dispatched in parallel.
 
 ## Setup & Running
 
@@ -99,7 +123,8 @@ Set `TEST_MODE=true` before `collect_calibration_data.py` or `run_eval.py` to ru
 - **Models:** OpenAI `gpt-5.4-nano` (cheap), Google `gemini-3.1-flash-lite` (mid), Anthropic `claude-sonnet-5` (capable)
 - **Calibration:** scikit-learn logistic regression over 4 features (logprob uncertainty, self-consistency dispersion, hard-cluster embedding distance, response length)
 - **Infra:** Neon (Postgres, free tier, no expiry), Upstash (Redis, free tier, no expiry), Cloud Run (deployment)
-- **Tests:** pytest, 16 tests covering the decision logic, stats utilities, and full circuit-breaker state machine
+- **Multi-agent stack:** LangGraph (state graph + parallel `Send` dispatch), pgvector on the existing Neon Postgres (long-term memory), Redis (session-scoped conversation history), `psycopg[binary]` (LangGraph's Postgres checkpointer) - see `v2/app/agents/`
+- **Tests:** pytest, 31 tests covering the decision logic, stats utilities, circuit-breaker state machine, and the multi-agent planner/memory/session layers
 
 ## Prior Art
 
